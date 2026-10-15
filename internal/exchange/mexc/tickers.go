@@ -255,7 +255,12 @@ func buildFuturesTickers(
 
 		timestamp := receivedAt
 		var exchangeTimestamp *time.Time
-		if milliseconds, present, parseErr := parseIntegerRaw(item.Timestamp); parseErr == nil && present && milliseconds > 0 {
+		milliseconds, timestampPresent, timestampErr := parseIntegerRaw(item.Timestamp)
+		if timestampErr != nil {
+			stats.Skipped++
+			continue
+		}
+		if timestampPresent && milliseconds > 0 {
 			value := time.UnixMilli(milliseconds).UTC()
 			timestamp = value
 			exchangeTimestamp = &value
