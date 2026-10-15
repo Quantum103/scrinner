@@ -296,7 +296,7 @@ func parseDecimalRaw(raw json.RawMessage) (decimal.Decimal, error) {
 	if value == "" || value == "null" {
 		return decimal.Zero, fmt.Errorf("decimal отсутствует")
 	}
-	if strings.HasPrefix(value, """) {
+	if len(value) > 0 && value[0] == '"' {
 		var decoded string
 		if err := json.Unmarshal(raw, &decoded); err != nil {
 			return decimal.Zero, err
