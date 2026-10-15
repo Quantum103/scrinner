@@ -405,7 +405,7 @@ func parseIntegerRaw(raw json.RawMessage) (int64, bool, error) {
 	if trimmed == "" || trimmed == "null" {
 		return 0, false, nil
 	}
-	if strings.HasPrefix(trimmed, """) {
+	if len(trimmed) > 0 && trimmed[0] == '"' {
 		var value string
 		if err := json.Unmarshal(raw, &value); err != nil {
 			return 0, true, err
