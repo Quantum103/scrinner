@@ -15,6 +15,9 @@ exchanges:
 
   okx:
     enabled: false
+    # При необходимости укажи официальный региональный URL, рекомендованный OKX для аккаунта:
+    # base_url: https://eea.okx.com
+    # Без base_url используется https://openapi.okx.com
 
   gate:
     enabled: false

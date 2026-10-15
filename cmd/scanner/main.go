@@ -13,6 +13,7 @@ import (
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/binance"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/bybit"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/mexc"
+	"github.com/example/crypto-arbitrage-scanner/internal/exchange/okx"
 	"github.com/example/crypto-arbitrage-scanner/internal/market"
 	"github.com/example/crypto-arbitrage-scanner/internal/price"
 	"github.com/example/crypto-arbitrage-scanner/internal/storage"
@@ -78,6 +79,14 @@ func main() {
 	}
 	if err := runMEXCPassIfEnabled(ctx, cfg.Exchanges.MEXC.Enabled, logger, db); err != nil {
 		logger.Error("MEXC pass failed", "error", err)
+		passFailed = true
+	}
+
+	if cfg.Exchanges.OKX.Enabled {
+		enabledAdapters++
+	}
+	if err := runOKXPassIfEnabled(ctx, cfg.Exchanges.OKX.Enabled, cfg.Exchanges.OKX.BaseURL, logger, db); err != nil {
+		logger.Error("OKX pass failed", "error", err)
 		passFailed = true
 	}
 
@@ -361,4 +370,94 @@ func runMEXCPassIfEnabled(ctx context.Context, enabled bool, logger *slog.Logger
 		return nil
 	}
 	return runMEXCPass(ctx, logger, db)
+}
+
+// runOKXPass выполняет один исследовательский проход OKX через публичный REST API.
+func runOKXPass(ctx context.Context, logger *slog.Logger, db *storage.DB, baseURL string) error {
+	clientConfig := okx.DefaultClientConfig()
+	if strings.TrimSpace(baseURL) != "" {
+		clientConfig.BaseURL = strings.TrimSpace(baseURL)
+	}
+	client, err := okx.NewClient(clientConfig)
+	if err != nil {
+		return fmt.Errorf("создать HTTP-клиент OKX: %w", err)
+	}
+	return runOKXPassWithAdapter(ctx, logger, db, okx.New(client, logger))
+}
+
+// runOKXPassWithAdapter позволяет тестировать весь поток OKX на mock HTTP API.
+func runOKXPassWithAdapter(ctx context.Context, logger *slog.Logger, db *storage.DB, adapter *okx.Adapter) error {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if adapter == nil {
+		return fmt.Errorf("OKX adapter не задан")
+	}
+
+	markets, err := adapter.DiscoverMarkets(ctx)
+	if err != nil {
+		return err
+	}
+
+	spotCount, swapCount := 0, 0
+	marketIDs := make(map[string]int64, len(markets))
+	marketRepo := storage.NewMarketRepository(db)
+	for _, m := range markets {
+		switch {
+		case m.IsSpot():
+			spotCount++
+		case m.IsPerpetual():
+			swapCount++
+		default:
+			continue
+		}
+		id, err := marketRepo.UpsertMarket(ctx, m)
+		if err != nil {
+			return fmt.Errorf("сохранить OKX рынок %s: %w", m.Symbol, err)
+		}
+		marketIDs[marketStorageKey(m)] = id
+	}
+
+	tickers, stats, err := adapter.CollectTickersWithStats(ctx, markets)
+	if err != nil {
+		return err
+	}
+	snapshots := make([]storage.PriceSnapshot, 0, len(tickers))
+	for _, ticker := range tickers {
+		if !ticker.IsValid() {
+			continue
+		}
+		marketID, ok := marketIDs[tickerStorageKey(ticker)]
+		if !ok {
+			logger.Warn("OKX ticker не сопоставлен с сохранённым рынком",
+				"symbol", ticker.Symbol, "market_type", ticker.MarketType, "contract_type", ticker.ContractType)
+			continue
+		}
+		snapshots = append(snapshots, storage.PriceSnapshot{
+			MarketID: marketID, Timestamp: ticker.Timestamp, ReceivedAt: ticker.ReceivedAt,
+			ExchangeTimestamp: ticker.ExchangeTimestamp, Bid: ticker.Bid, Ask: ticker.Ask,
+			Volume24h: ticker.Volume24h,
+		})
+	}
+	if err := storage.NewPriceRepository(db).InsertPriceSnapshots(ctx, snapshots); err != nil {
+		return fmt.Errorf("сохранить OKX price snapshots: %w", err)
+	}
+	logger.Info("OKX pass completed",
+		"spot_usdt", spotCount, "linear_usdt_swap", swapCount,
+		"tickers_received", stats.Received, "tickers_valid", stats.Valid,
+		"tickers_skipped", stats.Skipped, "markets_stored", len(marketIDs),
+		"snapshots_stored", len(snapshots))
+	return nil
+}
+
+// runOKXPassIfEnabled не создаёт клиент и не вызывает API, когда адаптер выключен.
+func runOKXPassIfEnabled(ctx context.Context, enabled bool, baseURL string, logger *slog.Logger, db *storage.DB) error {
+	if !enabled {
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Info("OKX adapter disabled by configuration")
+		return nil
+	}
+	return runOKXPass(ctx, logger, db, baseURL)
 }

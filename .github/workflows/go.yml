@@ -28,8 +28,8 @@ jobs:
 
       - name: Проверить форматирование Go
         run: |
-          gofmt -d cmd/scanner/main.go cmd/scanner/main_test.go internal/exchange/mexc/*.go
-          unformatted="$(gofmt -l cmd/scanner/main.go cmd/scanner/main_test.go internal/exchange/mexc/*.go)"
+          gofmt -d cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go
+          unformatted="$(gofmt -l cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
             exit 1
@@ -40,3 +40,6 @@ jobs:
 
       - name: Запустить go vet
         run: go vet ./...
+
+      - name: Собрать все пакеты проекта
+        run: go build ./...
