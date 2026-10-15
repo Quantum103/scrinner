@@ -351,7 +351,6 @@ func runMEXCPassWithAdapter(ctx context.Context, logger *slog.Logger, db *storag
 	return nil
 }
 
-
 // runMEXCPassIfEnabled не создаёт клиент и не обращается к сети, если MEXC выключен.
 func runMEXCPassIfEnabled(ctx context.Context, enabled bool, logger *slog.Logger, db *storage.DB) error {
 	if !enabled {
