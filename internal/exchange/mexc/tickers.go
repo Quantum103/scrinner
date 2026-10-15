@@ -2,8 +2,8 @@ package mexc
 
 import (
 	"context"
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
