@@ -12,11 +12,12 @@ const (
 	tradingStatus      = "Trading"
 	linearPerpetual    = "LinearPerpetual"
 	usdtAsset          = "USDT"
+	maxInstrumentPages = 100
 )
 
 // apiEnvelope описывает общую оболочку ответа публичного V5 API Bybit.
 type apiEnvelope struct {
-	RetCode int             `json:"retCode"`
+	RetCode *int            `json:"retCode"`
 	RetMsg  string          `json:"retMsg"`
 	Result  json.RawMessage `json:"result"`
 	Time    int64           `json:"time"`
