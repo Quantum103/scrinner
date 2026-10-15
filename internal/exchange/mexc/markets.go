@@ -99,6 +99,10 @@ func (a *Adapter) discoverMarkets(ctx context.Context) ([]market.Market, error) 
 			!strings.EqualFold(strings.TrimSpace(contract.SettleCoin), usdtAsset) {
 			continue
 		}
+		if (contract.APIAllowed != nil && !*contract.APIAllowed) ||
+			(contract.IsHidden != nil && *contract.IsHidden) {
+			continue
+		}
 
 		futureType, typePresent, err := parseIntegerRaw(contract.FutureType)
 		if err != nil {
