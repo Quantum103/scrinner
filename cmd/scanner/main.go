@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -11,6 +12,7 @@ import (
 	"github.com/example/crypto-arbitrage-scanner/internal/config"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/binance"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/bybit"
+	"github.com/example/crypto-arbitrage-scanner/internal/exchange/mexc"
 	"github.com/example/crypto-arbitrage-scanner/internal/market"
 	"github.com/example/crypto-arbitrage-scanner/internal/price"
 	"github.com/example/crypto-arbitrage-scanner/internal/storage"
@@ -69,6 +71,16 @@ func main() {
 		}
 	} else {
 		logger.Info("Binance adapter disabled by configuration")
+	}
+
+	if cfg.Exchanges.MEXC.Enabled {
+		enabledAdapters++
+		if err := runMEXCPass(ctx, logger, db); err != nil {
+			logger.Error("MEXC pass failed", "error", err)
+			passFailed = true
+		}
+	} else {
+		logger.Info("MEXC adapter disabled by configuration")
 	}
 
 	if enabledAdapters == 0 {
@@ -254,3 +266,90 @@ func tickerStorageKey(t price.Ticker) string {
 		string(t.MarketType) + "|" +
 		string(t.ContractType)
 }
+
+// runMEXCPass выполняет один исследовательский проход MEXC без scheduler и detector.
+func runMEXCPass(ctx context.Context, logger *slog.Logger, db *storage.DB) error {
+	return runMEXCPassWithAdapter(ctx, logger, db, mexc.NewDefault(logger))
+}
+
+// runMEXCPassWithAdapter позволяет проверять весь поток MEXC через mock HTTP API.
+func runMEXCPassWithAdapter(ctx context.Context, logger *slog.Logger, db *storage.DB, adapter *mexc.Adapter) error {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if adapter == nil {
+		return fmt.Errorf("MEXC adapter не задан")
+	}
+
+	markets, err := adapter.DiscoverMarkets(ctx)
+	if err != nil {
+		return err
+	}
+
+	spotCount := 0
+	perpetualCount := 0
+	marketIDs := make(map[string]int64, len(markets))
+	marketRepo := storage.NewMarketRepository(db)
+
+	for _, m := range markets {
+		switch {
+		case m.IsSpot():
+			spotCount++
+		case m.IsPerpetual():
+			perpetualCount++
+		default:
+			continue
+		}
+
+		id, err := marketRepo.UpsertMarket(ctx, m)
+		if err != nil {
+			return fmt.Errorf("сохранить MEXC рынок %s: %w", m.Symbol, err)
+		}
+		marketIDs[marketStorageKey(m)] = id
+	}
+
+	tickers, stats, err := adapter.CollectTickersWithStats(ctx, markets)
+	if err != nil {
+		return err
+	}
+
+	snapshots := make([]storage.PriceSnapshot, 0, len(tickers))
+	for _, ticker := range tickers {
+		if !ticker.IsValid() {
+			continue
+		}
+
+		key := tickerStorageKey(ticker)
+		marketID, ok := marketIDs[key]
+		if !ok {
+			logger.Warn("MEXC ticker has no matching stored market", "symbol", ticker.Symbol, "market_type", ticker.MarketType, "contract_type", ticker.ContractType)
+			continue
+		}
+
+		snapshots = append(snapshots, storage.PriceSnapshot{
+			MarketID:          marketID,
+			Timestamp:         ticker.Timestamp,
+			ReceivedAt:        ticker.ReceivedAt,
+			ExchangeTimestamp: ticker.ExchangeTimestamp,
+			Bid:               ticker.Bid,
+			Ask:               ticker.Ask,
+			Volume24h:         ticker.Volume24h,
+		})
+	}
+
+	if err := storage.NewPriceRepository(db).InsertPriceSnapshots(ctx, snapshots); err != nil {
+		return fmt.Errorf("сохранить MEXC price snapshots: %w", err)
+	}
+
+	logger.Info("MEXC pass completed",
+		"spot_usdt", spotCount,
+		"perpetual_usdt", perpetualCount,
+		"tickers_received", stats.Received,
+		"tickers_valid", stats.Valid,
+		"tickers_skipped", stats.Skipped,
+		"markets_stored", len(marketIDs),
+		"snapshots_stored", len(snapshots),
+	)
+	return nil
+}
+
