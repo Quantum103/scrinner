@@ -40,3 +40,6 @@ jobs:
 
       - name: Запустить go vet
         run: go vet ./...
+
+      - name: Собрать все пакеты проекта
+        run: go build ./...
