@@ -1,0 +1,33 @@
+name: Stage 7 baseline checks (temporary)
+
+on:
+  push:
+    branches:
+      - "feat/stage-7-okx-adapter"
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: Проверка базового состояния до Stage 7
+    runs-on: ubuntu-latest
+    steps:
+      - name: Получить исходный код
+        uses: actions/checkout@v4
+      - name: Установить Go из go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Проверить gofmt до Stage 7
+        run: |
+          unformatted="$(gofmt -l cmd/scanner/main.go cmd/scanner/main_test.go internal/exchange/mexc/*.go)"
+          if [ -n "$unformatted" ]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+      - name: Запустить базовые unit-тесты
+        run: go test ./...
+      - name: Запустить базовый go vet
+        run: go vet ./...
