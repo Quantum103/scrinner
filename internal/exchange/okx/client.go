@@ -36,13 +36,13 @@ type ClientConfig struct {
 
 // APIError содержит диагностические сведения об ошибке HTTP или API OKX.
 type APIError struct {
-	Operation      string
-	Endpoint       string
-	HTTPStatus     int
-	Code           string
-	Message        string
-	RetryAfter     time.Duration
-	retryAfterSet  bool
+	Operation     string
+	Endpoint      string
+	HTTPStatus    int
+	Code          string
+	Message       string
+	RetryAfter    time.Duration
+	retryAfterSet bool
 }
 
 // Error возвращает диагностическое описание ошибки.
