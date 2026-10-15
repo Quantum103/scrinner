@@ -79,8 +79,8 @@ func TestConvertSwapInstrumentRequiresConsistentMetadata(t *testing.T) {
 		t.Fatalf("валидный линейный контракт отклонён: %v", err)
 	}
 	tests := []struct {
-		name       string
-		mutate     func(*swapInstrument)
+		name   string
+		mutate func(*swapInstrument)
 	}{
 		{name: "inverse", mutate: func(v *swapInstrument) { v.CtType = "inverse" }},
 		{name: "USDC settlement", mutate: func(v *swapInstrument) { v.SettleCcy = "USDC" }},

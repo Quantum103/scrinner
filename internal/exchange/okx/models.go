@@ -49,11 +49,11 @@ type swapInstrument struct {
 
 // marketTicker содержит только поля пакетной котировки, используемые сканером.
 type marketTicker struct {
-	InstType   string          `json:"instType"`
-	InstID     string          `json:"instId"`
-	BidPx      json.RawMessage `json:"bidPx"`
-	AskPx      json.RawMessage `json:"askPx"`
-	Timestamp  json.RawMessage `json:"ts"`
-	Vol24h     json.RawMessage `json:"vol24h"`
-	VolCcy24h  json.RawMessage `json:"volCcy24h"`
+	InstType  string          `json:"instType"`
+	InstID    string          `json:"instId"`
+	BidPx     json.RawMessage `json:"bidPx"`
+	AskPx     json.RawMessage `json:"askPx"`
+	Timestamp json.RawMessage `json:"ts"`
+	Vol24h    json.RawMessage `json:"vol24h"`
+	VolCcy24h json.RawMessage `json:"volCcy24h"`
 }

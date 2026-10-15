@@ -331,7 +331,7 @@ func parseRawString(raw json.RawMessage) (string, bool, error) {
 	if value == "" || value == "null" {
 		return "", false, nil
 	}
-	if strings.HasPrefix(value, """) {
+	if strings.HasPrefix(value, "\"") {
 		var decoded string
 		if err := json.Unmarshal(raw, &decoded); err != nil {
 			return "", true, err

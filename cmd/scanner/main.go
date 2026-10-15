@@ -82,7 +82,6 @@ func main() {
 		passFailed = true
 	}
 
-
 	if cfg.Exchanges.OKX.Enabled {
 		enabledAdapters++
 	}
@@ -372,7 +371,6 @@ func runMEXCPassIfEnabled(ctx context.Context, enabled bool, logger *slog.Logger
 	}
 	return runMEXCPass(ctx, logger, db)
 }
-
 
 // runOKXPass выполняет один исследовательский проход OKX через публичный REST API.
 func runOKXPass(ctx context.Context, logger *slog.Logger, db *storage.DB, baseURL string) error {
