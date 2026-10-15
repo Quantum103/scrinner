@@ -18,9 +18,9 @@ const (
 
 	usdtAsset = "USDT"
 
-	spotStatusOnline = 1
-	futuresPerpetual = 1
-	futuresEnabled   = 0
+	spotStatusOnline  = 1
+	futuresPerpetual  = 1
+	futuresEnabled    = 0
 	futuresTypeNormal = 1
 )
 
@@ -43,22 +43,22 @@ type spotSymbol struct {
 	BaseAsset            string          `json:"baseAsset"`
 	QuoteAsset           string          `json:"quoteAsset"`
 	IsSpotTradingAllowed *bool           `json:"isSpotTradingAllowed"`
-	Permissions           []string        `json:"permissions"`
-	TradeSideType         json.RawMessage `json:"tradeSideType"`
+	Permissions          []string        `json:"permissions"`
+	TradeSideType        json.RawMessage `json:"tradeSideType"`
 }
 
 // futuresContract содержит структурированные метаданные бессрочного контракта.
 type futuresContract struct {
-	Symbol      string          `json:"symbol"`
-	BaseCoin    string          `json:"baseCoin"`
-	QuoteCoin   string          `json:"quoteCoin"`
-	SettleCoin  string          `json:"settleCoin"`
-	FutureType  json.RawMessage `json:"futureType"`
-	State       json.RawMessage `json:"state"`
-	Type        json.RawMessage `json:"type"`
+	Symbol       string          `json:"symbol"`
+	BaseCoin     string          `json:"baseCoin"`
+	QuoteCoin    string          `json:"quoteCoin"`
+	SettleCoin   string          `json:"settleCoin"`
+	FutureType   json.RawMessage `json:"futureType"`
+	State        json.RawMessage `json:"state"`
+	Type         json.RawMessage `json:"type"`
 	ContractSize json.RawMessage `json:"contractSize"`
-	APIAllowed  *bool           `json:"apiAllowed"`
-	IsHidden    *bool           `json:"isHidden"`
+	APIAllowed   *bool           `json:"apiAllowed"`
+	IsHidden     *bool           `json:"isHidden"`
 }
 
 // spotBookTicker описывает лучшие цены Spot из bookTicker.
