@@ -75,12 +75,10 @@ func main() {
 
 	if cfg.Exchanges.MEXC.Enabled {
 		enabledAdapters++
-		if err := runMEXCPass(ctx, logger, db); err != nil {
-			logger.Error("MEXC pass failed", "error", err)
-			passFailed = true
-		}
-	} else {
-		logger.Info("MEXC adapter disabled by configuration")
+	}
+	if err := runMEXCPassIfEnabled(ctx, cfg.Exchanges.MEXC.Enabled, logger, db); err != nil {
+		logger.Error("MEXC pass failed", "error", err)
+		passFailed = true
 	}
 
 	if enabledAdapters == 0 {
@@ -353,3 +351,15 @@ func runMEXCPassWithAdapter(ctx context.Context, logger *slog.Logger, db *storag
 	return nil
 }
 
+
+// runMEXCPassIfEnabled не создаёт клиент и не обращается к сети, если MEXC выключен.
+func runMEXCPassIfEnabled(ctx context.Context, enabled bool, logger *slog.Logger, db *storage.DB) error {
+	if !enabled {
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Info("MEXC adapter disabled by configuration")
+		return nil
+	}
+	return runMEXCPass(ctx, logger, db)
+}
