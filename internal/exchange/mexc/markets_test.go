@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/example/crypto-arbitrage-scanner/internal/market"
 	"github.com/shopspring/decimal"
 )
 
