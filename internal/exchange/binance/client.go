@@ -198,7 +198,6 @@ func (c *Client) getJSON(
 			)
 		}
 
-		receivedAt := time.Now().UTC()
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, c.maxResponseSize+1))
 		_ = resp.Body.Close()
 		if readErr != nil {
@@ -218,6 +217,7 @@ func (c *Client) getJSON(
 			)
 		}
 
+		receivedAt := time.Now().UTC()
 		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 			apiErr := buildAPIError(operation, endpoint, resp.StatusCode, resp.Header, body)
 			if attempt < c.maxRetries && apiErr.IsRetryable() {
