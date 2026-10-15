@@ -12,6 +12,7 @@
 - **Bybit V5** — Spot и Linear Perpetual.
 - **Binance** — Spot и USDⓈ-M Perpetual.
 - **MEXC** — Spot и USDT Perpetual.
+- **OKX** — Spot и линейные USDT-margined SWAP Perpetual.
 
 Адаптеры используют общие модели `Market` и `Ticker`, нормализатор и существующие SQLite-репозитории. Spot и Perpetual остаются отдельными рынками, даже если относятся к одному базовому активу. Оригинальные символы бирж сохраняются без изменения.
 
@@ -59,6 +60,35 @@
 ### HTTP-обработка
 
 Клиент переиспользует HTTP-соединения, учитывает `context.Context`, ограничивает timeout и размер ответа, проверяет статус HTTP и ошибки внутри JSON. Retry ограничены; 418 не повторяется, 429 учитывает `Retry-After`, а 5xx повторяется с паузой. Если API ответило ошибкой или структура ответа некорректна, ошибка возвращается вызывающему коду.
+
+
+## OKX API
+
+Адаптер OKX использует только публичные REST-эндпоинты без ключей и без торговых запросов. Глобальный URL по умолчанию — `https://openapi.okx.com`: официальный журнал документации OKX от 20 мая 2026 года рекомендует этот домен для REST. Для зарегистрированных в отдельных регионах пользователей домен может отличаться; его можно задать параметром `exchanges.okx.base_url`, например `https://eea.okx.com` или `https://us.okx.com`, если такой адрес предписан аккаунту. Источник: https://www.okx.com/docs-v5/log_en/
+
+| Назначение | HTTP-метод и путь | Используемые поля и ограничения |
+|---|---|---|
+| Spot metadata | `GET /api/v5/public/instruments?instType=SPOT` | `instType`, `instId`, `baseCcy`, `quoteCcy`, `state`. Лимит: 20 запросов за 2 секунды на тип инструмента. |
+| SWAP metadata | `GET /api/v5/public/instruments?instType=SWAP` | `instType`, `instId`, `ctType`, `settleCcy`, `state`, `ctValCcy`, `uly`, `instFamily`, при наличии `baseCcy`/`quoteCcy`. |
+| Spot bulk tickers | `GET /api/v5/market/tickers?instType=SPOT` | `instType`, `instId`, `bidPx`, `askPx`, `ts`, `vol24h`. Лимит: 20 запросов за 2 секунды на IP. |
+| SWAP bulk tickers | `GET /api/v5/market/tickers?instType=SWAP` | `instType`, `instId`, `bidPx`, `askPx`, `ts`, `volCcy24h`. Лимит: 20 запросов за 2 секунды на IP. |
+
+Все перечисленные endpoints публичные. Ответы имеют оболочку `code`, `msg`, `data`; `code` должен быть строкой или числом со значением `0`. HTTP 200 при ненулевом `code` считается ошибкой. Рыночные endpoints могут обслуживаться независимыми кешами, поэтому metadata и котировки не гарантируют один и тот же момент времени.
+
+### Фильтрация рынков
+
+- Spot: принимается только `instType=SPOT`, `quoteCcy=USDT`, `state=live`, заполненные `baseCcy` и `instId`. Идентификатор сверяется с метаданными, но актив и котируемая валюта берутся не из одной строки.
+- Perpetual: принимаются только `instType=SWAP`, `ctType=linear`, `settleCcy=USDT`, `state=live`. Когда `quoteCcy` или `uly`/`instFamily` доступны, они также должны согласовываться с USDT. Базовый актив берётся из `baseCcy`, `ctValCcy` и/или полей underlying; противоречивые или неизвестные metadata пропускаются с диагностикой.
+- Исключаются `FUTURES`, `OPTION`, inverse-контракты, приостановленные рынки и неподдерживаемые расчётные валюты.
+- Оригинальный `instId` сохраняется. Spot `BTC-USDT` и SWAP `BTC-USDT-SWAP` остаются разными рынками и имеют разные canonical keys.
+
+### Котировки, время и объём
+
+- Для bid/ask используются исключительно `bidPx` и `askPx`; поле `last` никогда не подменяет лучшие цены.
+- Цена и объём разбираются через `shopspring/decimal` из JSON-строк или их исходного числового представления, без промежуточного `float64`.
+- `ts` преобразуется из Unix timestamp в миллисекундах в UTC. В `Timestamp` и `ExchangeTimestamp` сохраняется время OKX, а в `ReceivedAt` — локальное UTC-время получения ответа.
+- `vol24h` у Spot измеряется в базовом активе. Для деривативов `vol24h` выражен в контрактах, а `volCcy24h` — в базовой валюте; именно его адаптер сохраняет в общем `Volume24h`. Источник: https://www.okx.com/docs-v5/en/
+- Пустые/некорректные bulk-ответы, неизвестные символы, отсутствующие временные метки, невалидные или пересечённые цены не создают ценовые снимки.
 
 ## Конфигурация
 

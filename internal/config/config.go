@@ -30,7 +30,7 @@ type ExchangesConfig struct {
 	Binance ExchangeConfig `yaml:"binance"`
 	Bybit   ExchangeConfig `yaml:"bybit"`
 	MEXC    ExchangeConfig `yaml:"mexc"`
-	OKX     ExchangeConfig `yaml:"okx"`
+	OKX     OKXConfig       `yaml:"okx"`
 	Gate    ExchangeConfig `yaml:"gate"`
 	Bitget  ExchangeConfig `yaml:"bitget"`
 }
@@ -38,6 +38,12 @@ type ExchangesConfig struct {
 // ExchangeConfig включает или выключает адаптер биржи.
 type ExchangeConfig struct {
 	Enabled bool `yaml:"enabled"`
+}
+
+// OKXConfig содержит настройки публичного API OKX.
+type OKXConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	BaseURL string `yaml:"base_url"`
 }
 
 // DatabaseConfig содержит настройки SQLite.
