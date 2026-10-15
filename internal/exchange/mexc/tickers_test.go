@@ -2,6 +2,7 @@ package mexc
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -138,5 +139,66 @@ func TestCollectTickersRejectsNullBookTicker(t *testing.T) {
 	_, _, err := adapter.CollectTickersWithStats(context.Background(), markets)
 	if err == nil {
 		t.Fatal("JSON null не должен приниматься вместо списка котировок")
+	}
+}
+
+
+// TestMissingVolumesRemainUnknown проверяет, что отсутствующий объём не подменяется оборотом.
+func TestMissingVolumesRemainUnknown(t *testing.T) {
+	now := time.Now().UTC()
+	spotMarkets := map[string]market.Market{
+		"BTCUSDT": {Exchange: "mexc", Symbol: "BTCUSDT", BaseAsset: "BTC", QuoteAsset: "USDT", MarketType: market.MarketTypeSpot, ContractType: market.ContractTypeSpot, Active: true},
+	}
+	spotBook := spotTickerList{{
+		Symbol: "BTCUSDT",
+		BidPrice: json.RawMessage(`"1.00"`),
+		AskPrice: json.RawMessage(`"1.01"`),
+	}}
+	spotTickers, spotStats, err := buildSpotTickers(spotBook, spotMarkets, map[string]*decimal.Decimal{}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spotTickers) != 1 || spotStats.Valid != 1 || spotTickers[0].Volume24h != nil {
+		t.Fatalf("Spot без объёма должен сохранять nil volume: tickers=%#v stats=%#v", spotTickers, spotStats)
+	}
+
+	futuresMarkets := map[string]market.Market{
+		"BTC_USDT": {Exchange: "mexc", Symbol: "BTC_USDT", BaseAsset: "BTC", QuoteAsset: "USDT", MarketType: market.MarketTypeFutures, ContractType: market.ContractTypePerpetual, Active: true},
+	}
+	futuresBook := futuresTickerList{{
+		Symbol: "BTC_USDT",
+		Bid1: json.RawMessage("1.00"),
+		Ask1: json.RawMessage("1.01"),
+		Volume24: json.RawMessage("100"),
+		Amount24: json.RawMessage("999999"),
+		Timestamp: json.RawMessage("1792050000123"),
+	}}
+	futuresTickers, futuresStats, err := buildFuturesTickers(futuresBook, futuresMarkets, map[string]decimal.Decimal{}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(futuresTickers) != 1 || futuresStats.Valid != 1 || futuresTickers[0].Volume24h != nil {
+		t.Fatalf("Futures без contractSize не должны подменять Volume24 оборотом Amount24: tickers=%#v stats=%#v", futuresTickers, futuresStats)
+	}
+}
+
+// TestFuturesTickerSkipsMalformedTimestamp отклоняет строку котировки с некорректной временной меткой.
+func TestFuturesTickerSkipsMalformedTimestamp(t *testing.T) {
+	now := time.Now().UTC()
+	requested := map[string]market.Market{
+		"BTC_USDT": {Exchange: "mexc", Symbol: "BTC_USDT", BaseAsset: "BTC", QuoteAsset: "USDT", MarketType: market.MarketTypeFutures, ContractType: market.ContractTypePerpetual, Active: true},
+	}
+	book := futuresTickerList{{
+		Symbol: "BTC_USDT",
+		Bid1: json.RawMessage("1"),
+		Ask1: json.RawMessage("2"),
+		Timestamp: json.RawMessage(`"not-a-timestamp"`),
+	}}
+	tickers, stats, err := buildFuturesTickers(book, requested, map[string]decimal.Decimal{}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tickers) != 0 || stats.Valid != 0 || stats.Skipped != 1 {
+		t.Fatalf("котировка с некорректным timestamp должна быть пропущена: tickers=%#v stats=%#v", tickers, stats)
 	}
 }
