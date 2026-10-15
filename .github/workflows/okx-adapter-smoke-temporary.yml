@@ -1,0 +1,26 @@
+name: OKX adapter live smoke (temporary)
+
+on:
+  push:
+    branches:
+      - "feat/stage-7-okx-adapter"
+
+permissions:
+  contents: read
+
+jobs:
+  live-adapter:
+    name: Проверить реальный адаптер OKX
+    runs-on: ubuntu-latest
+    steps:
+      - name: Получить исходный код
+        uses: actions/checkout@v4
+      - name: Установить Go из go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Загрузить инструменты и пакетные котировки через адаптер
+        env:
+          OKX_LIVE: "1"
+        run: go test ./internal/exchange/okx -run '^TestOKXLivePublicAPI$' -v -count=1
