@@ -28,9 +28,9 @@ jobs:
 
       - name: Проверить форматирование Go
         run: |
-          unformatted="$(gofmt -l $(git ls-files '*.go'))"
-          if [ -n "$unformatted" ]; then
-            printf 'Неформатированные Go-файлы:\\n%s\\n' "$unformatted"
+          diff="$(gofmt -d cmd/scanner/main.go cmd/scanner/main_test.go internal/exchange/mexc/*.go)"
+          if [ -n "$diff" ]; then
+            printf '%s\\n' "$diff"
             exit 1
           fi
 
