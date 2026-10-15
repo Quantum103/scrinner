@@ -17,10 +17,10 @@ type Adapter struct {
 	client *Client
 	logger *slog.Logger
 
-	mu                  sync.Mutex
-	spotTickerCache     []spotTicker
+	mu                   sync.Mutex
+	spotTickerCache      []spotTicker
 	spotTickerReceivedAt time.Time
-	hasSpotTickerCache  bool
+	hasSpotTickerCache   bool
 }
 
 var _ exchange.Exchange = (*Adapter)(nil)

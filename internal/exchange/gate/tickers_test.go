@@ -87,7 +87,7 @@ func TestCollectTickersUsesBestBidAskDecimalBaseVolumesAndReceiveTime(t *testing
 func TestBuildSpotTickersSkipsBadPricesUnknownMarketsAndETFs(t *testing.T) {
 	t.Parallel()
 	requested := map[string]market.Market{
-		"BTC_USDT": {Exchange: "gate", Symbol: "BTC_USDT", BaseAsset: "BTC", QuoteAsset: "USDT", MarketType: market.MarketTypeSpot, ContractType: market.ContractTypeSpot, Active: true},
+		"BTC_USDT":   {Exchange: "gate", Symbol: "BTC_USDT", BaseAsset: "BTC", QuoteAsset: "USDT", MarketType: market.MarketTypeSpot, ContractType: market.ContractTypeSpot, Active: true},
 		"BTC3L_USDT": {Exchange: "gate", Symbol: "BTC3L_USDT", BaseAsset: "BTC3L", QuoteAsset: "USDT", MarketType: market.MarketTypeSpot, ContractType: market.ContractTypeSpot, Active: true},
 	}
 	response := []spotTicker{

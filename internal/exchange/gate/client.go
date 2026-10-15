@@ -225,7 +225,7 @@ func checkAPIErrorBody(operation, endpoint string, status int, body []byte) erro
 	if strings.TrimSpace(payload.Label) != "" || strings.TrimSpace(payload.Message) != "" {
 		return &APIError{
 			Operation: operation, Endpoint: endpoint, HTTPStatus: status,
-			Label: strings.TrimSpace(payload.Label),
+			Label:   strings.TrimSpace(payload.Label),
 			Message: nonEmptyMessage(payload.Message, "Gate вернул ошибку без описания"),
 		}
 	}

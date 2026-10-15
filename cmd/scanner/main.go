@@ -471,7 +471,6 @@ func runOKXPassIfEnabled(ctx context.Context, enabled bool, baseURL string, logg
 	return runOKXPass(ctx, logger, db, baseURL)
 }
 
-
 // runGatePass выполняет один исследовательский проход Gate через публичный REST API.
 func runGatePass(ctx context.Context, logger *slog.Logger, db *storage.DB, baseURL string) error {
 	clientConfig := gate.DefaultClientConfig()

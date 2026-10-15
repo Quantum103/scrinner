@@ -157,10 +157,10 @@ func TestConvertFuturesRequiresDirectTradingNonDelistingAndMultiplier(t *testing
 func TestDiscoverMarketsRejectsEmptyAndMalformedResponses(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name string
-		spot string
+		name    string
+		spot    string
 		futures string
-		want string
+		want    string
 	}{
 		{name: "empty spot", spot: "[]", futures: "[]", want: "пустой список"},
 		{name: "malformed spot", spot: "[", futures: "[]", want: "разобрать JSON"},

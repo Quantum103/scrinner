@@ -47,14 +47,14 @@ type futuresContract struct {
 
 // spotTicker содержит поля пакетной Spot-котировки.
 type spotTicker struct {
-	CurrencyPair  string          `json:"currency_pair"`
-	HighestBid    json.RawMessage `json:"highest_bid"`
-	LowestAsk     json.RawMessage `json:"lowest_ask"`
-	BaseVolume    json.RawMessage `json:"base_volume"`
-	QuoteVolume   json.RawMessage `json:"quote_volume"`
-	ETFNetValue   json.RawMessage `json:"etf_net_value"`
+	CurrencyPair   string          `json:"currency_pair"`
+	HighestBid     json.RawMessage `json:"highest_bid"`
+	LowestAsk      json.RawMessage `json:"lowest_ask"`
+	BaseVolume     json.RawMessage `json:"base_volume"`
+	QuoteVolume    json.RawMessage `json:"quote_volume"`
+	ETFNetValue    json.RawMessage `json:"etf_net_value"`
 	ETFPreNetValue json.RawMessage `json:"etf_pre_net_value"`
-	ETFLeverage   json.RawMessage `json:"etf_leverage"`
+	ETFLeverage    json.RawMessage `json:"etf_leverage"`
 }
 
 // futuresTicker содержит лучшие цены и объёмы USDT Perpetual-контракта.

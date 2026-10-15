@@ -211,4 +211,3 @@ func TestParseRetryAfterAndErrorJSON(t *testing.T) {
 		t.Fatalf("неверно декодирована ошибка API: %#v err=%v", payload, err)
 	}
 }
-
