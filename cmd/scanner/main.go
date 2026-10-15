@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/example/crypto-arbitrage-scanner/internal/config"
+	"github.com/example/crypto-arbitrage-scanner/internal/exchange/binance"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/bybit"
 	"github.com/example/crypto-arbitrage-scanner/internal/market"
 	"github.com/example/crypto-arbitrage-scanner/internal/price"
@@ -47,13 +48,33 @@ func main() {
 	logger.Info("configuration loaded", "scan_interval", cfg.Scanner.Interval, "min_spread_percent", cfg.Scanner.MinSpreadPercent, "max_data_age", cfg.Scanner.MaxDataAge, "database", cfg.Database.Path)
 	logger.Info("SQLite storage initialized successfully")
 
-	if !cfg.Exchanges.Bybit.Enabled {
+	enabledAdapters := 0
+	passFailed := false
+
+	if cfg.Exchanges.Bybit.Enabled {
+		enabledAdapters++
+		if err := runBybitPass(ctx, logger, db); err != nil {
+			logger.Error("Bybit pass failed", "error", err)
+			passFailed = true
+		}
+	} else {
 		logger.Info("Bybit adapter disabled by configuration")
-		return
 	}
 
-	if err := runBybitPass(ctx, logger, db); err != nil {
-		logger.Error("Bybit pass failed", "error", err)
+	if cfg.Exchanges.Binance.Enabled {
+		enabledAdapters++
+		if err := runBinancePass(ctx, logger, db); err != nil {
+			logger.Error("Binance pass failed", "error", err)
+			passFailed = true
+		}
+	} else {
+		logger.Info("Binance adapter disabled by configuration")
+	}
+
+	if enabledAdapters == 0 {
+		logger.Info("all exchange adapters disabled by configuration")
+	}
+	if passFailed {
 		os.Exit(1)
 	}
 }
@@ -110,11 +131,13 @@ func runBybitPass(ctx context.Context, logger *slog.Logger, db *storage.DB) erro
 		}
 
 		snapshot := storage.PriceSnapshot{
-			MarketID:  marketID,
-			Timestamp: ticker.Timestamp,
-			Bid:       ticker.Bid,
-			Ask:       ticker.Ask,
-			Volume24h: ticker.Volume24h,
+			MarketID:          marketID,
+			Timestamp:         ticker.Timestamp,
+			ReceivedAt:        ticker.ReceivedAt,
+			ExchangeTimestamp: ticker.ExchangeTimestamp,
+			Bid:               ticker.Bid,
+			Ask:               ticker.Ask,
+			Volume24h:         ticker.Volume24h,
 		}
 		snapshots = append(snapshots, snapshot)
 	}
@@ -135,6 +158,84 @@ func runBybitPass(ctx context.Context, logger *slog.Logger, db *storage.DB) erro
 		"snapshots_stored", len(snapshots),
 	)
 
+	return nil
+}
+
+// runBinancePass выполняет один исследовательский проход Binance без scheduler и detector.
+func runBinancePass(ctx context.Context, logger *slog.Logger, db *storage.DB) error {
+	adapter := binance.NewDefault(logger)
+
+	markets, err := adapter.DiscoverMarkets(ctx)
+	if err != nil {
+		return err
+	}
+
+	spotCount := 0
+	perpetualCount := 0
+	marketIDs := make(map[string]int64, len(markets))
+	marketRepo := storage.NewMarketRepository(db)
+
+	for _, m := range markets {
+		switch {
+		case m.IsSpot():
+			spotCount++
+		case m.IsPerpetual():
+			perpetualCount++
+		default:
+			continue
+		}
+
+		id, err := marketRepo.UpsertMarket(ctx, m)
+		if err != nil {
+			return err
+		}
+		marketIDs[marketStorageKey(m)] = id
+	}
+
+	tickers, stats, err := adapter.CollectTickersWithStats(ctx, markets)
+	if err != nil {
+		return err
+	}
+
+	snapshots := make([]storage.PriceSnapshot, 0, len(tickers))
+	for _, ticker := range tickers {
+		if !ticker.IsValid() {
+			continue
+		}
+
+		key := tickerStorageKey(ticker)
+		marketID, ok := marketIDs[key]
+		if !ok {
+			logger.Warn("Binance ticker has no matching stored market", "symbol", ticker.Symbol, "market_type", ticker.MarketType, "contract_type", ticker.ContractType)
+			continue
+		}
+
+		snapshot := storage.PriceSnapshot{
+			MarketID:          marketID,
+			Timestamp:         ticker.Timestamp,
+			ReceivedAt:        ticker.ReceivedAt,
+			ExchangeTimestamp: ticker.ExchangeTimestamp,
+			Bid:               ticker.Bid,
+			Ask:               ticker.Ask,
+			Volume24h:         ticker.Volume24h,
+		}
+		snapshots = append(snapshots, snapshot)
+	}
+
+	priceRepo := storage.NewPriceRepository(db)
+	if err := priceRepo.InsertPriceSnapshots(ctx, snapshots); err != nil {
+		return err
+	}
+
+	logger.Info("Binance pass completed",
+		"spot_usdt", spotCount,
+		"perpetual_usdt", perpetualCount,
+		"tickers_received", stats.Received,
+		"tickers_valid", stats.Valid,
+		"tickers_skipped", stats.Skipped,
+		"markets_stored", len(marketIDs),
+		"snapshots_stored", len(snapshots),
+	)
 	return nil
 }
 
