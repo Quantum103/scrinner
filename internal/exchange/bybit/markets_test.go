@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/example/crypto-arbitrage-scanner/internal/market"
@@ -116,6 +117,82 @@ func TestDiscoverMarketsFiltersAndPaginates(t *testing.T) {
 	}
 }
 
+func TestDiscoverMarketsRejectsMissingInstrumentList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"retCode":0,"retMsg":"OK","result":{"category":"spot"},"time":1735809771618}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := New(client, nil)
+
+	_, err = adapter.DiscoverMarkets(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "result.list") {
+		t.Fatalf("ожидалась ошибка отсутствующего списка инструментов, получено: %v", err)
+	}
+}
+
+func TestDiscoverMarketsRejectsCursorCycle(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		category := r.URL.Query().Get("category")
+		cursor := r.URL.Query().Get("cursor")
+
+		if category == spotCategory {
+			writeJSON(t, w, map[string]any{
+				"retCode": 0,
+				"retMsg":  "OK",
+				"result": map[string]any{
+					"category": category,
+					"list":     []map[string]any{},
+				},
+				"time": 1735809771618,
+			})
+			return
+		}
+		if category != linearCategory {
+			t.Fatalf("неожиданная category=%s", category)
+		}
+
+		nextCursor := "cursor-a"
+		switch cursor {
+		case "":
+			nextCursor = "cursor-a"
+		case "cursor-a":
+			nextCursor = "cursor-b"
+		case "cursor-b":
+			nextCursor = "cursor-a"
+		default:
+			t.Fatalf("неожиданный cursor=%s", cursor)
+		}
+
+		writeJSON(t, w, map[string]any{
+			"retCode": 0,
+			"retMsg":  "OK",
+			"result": map[string]any{
+				"category":       category,
+				"nextPageCursor": nextCursor,
+				"list":           []map[string]any{},
+			},
+			"time": 1735809771618,
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := New(client, nil)
+
+	_, err = adapter.DiscoverMarkets(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "cursor") {
+		t.Fatalf("ожидалась ошибка циклического cursor, получено: %v", err)
+	}
+}
+
 func TestConvertInstrumentUsesStructuredFields(t *testing.T) {
 	spot, err := convertSpotInstrument(bybitInstrument{
 		Symbol:    "btc-usdt-original",
@@ -143,6 +220,28 @@ func TestConvertInstrumentUsesStructuredFields(t *testing.T) {
 	}
 	if perp.Symbol != "BTCUSDT" || !perp.IsPerpetual() {
 		t.Fatalf("unexpected perp=%#v", perp)
+	}
+
+	_, err = convertSpotInstrument(bybitInstrument{
+		Symbol:    "BTCUSDC",
+		Status:    tradingStatus,
+		BaseCoin:  "BTC",
+		QuoteCoin: "USDC",
+	})
+	if err == nil {
+		t.Fatal("USDC Spot рынок не должен проходить конвертацию")
+	}
+
+	_, err = convertLinearPerpetualInstrument(bybitInstrument{
+		Symbol:       "BTCUSDT",
+		ContractType: "LinearFutures",
+		Status:       tradingStatus,
+		BaseCoin:     "BTC",
+		QuoteCoin:    "USDT",
+		SettleCoin:   "USDT",
+	})
+	if err == nil {
+		t.Fatal("срочный Linear Futures не должен проходить конвертацию")
 	}
 
 	if market.MarketTypeSpot == market.MarketTypeFutures {
