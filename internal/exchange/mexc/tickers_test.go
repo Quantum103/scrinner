@@ -211,16 +211,16 @@ func TestCollectTickersRejectsEmptyBulkResponses(t *testing.T) {
 		body   string
 	}{
 		{
-			name: "Spot",
+			name:   "Spot",
 			market: market.Market{Exchange: "mexc", Symbol: "BTCUSDT", BaseAsset: "BTC", QuoteAsset: "USDT", MarketType: market.MarketTypeSpot, ContractType: market.ContractTypeSpot, Active: true},
-			path: spotBookTickerEndpoint,
-			body: `[]`,
+			path:   spotBookTickerEndpoint,
+			body:   `[]`,
 		},
 		{
-			name: "Futures",
+			name:   "Futures",
 			market: market.Market{Exchange: "mexc", Symbol: "BTC_USDT", BaseAsset: "BTC", QuoteAsset: "USDT", MarketType: market.MarketTypeFutures, ContractType: market.ContractTypePerpetual, Active: true},
-			path: futuresTickerEndpoint,
-			body: `{"success":true,"code":0,"data":[]}`,
+			path:   futuresTickerEndpoint,
+			body:   `{"success":true,"code":0,"data":[]}`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
