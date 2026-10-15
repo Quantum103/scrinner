@@ -28,9 +28,10 @@ jobs:
 
       - name: Проверить форматирование Go
         run: |
-          diff="$(gofmt -d cmd/scanner/main.go cmd/scanner/main_test.go internal/exchange/mexc/*.go)"
-          if [ -n "$diff" ]; then
-            printf '%s\\n' "$diff"
+          gofmt -d cmd/scanner/main.go cmd/scanner/main_test.go internal/exchange/mexc/*.go
+          unformatted="$(gofmt -l cmd/scanner/main.go cmd/scanner/main_test.go internal/exchange/mexc/*.go)"
+          if [ -n "$unformatted" ]; then
+            printf '%s\n' "$unformatted"
             exit 1
           fi
 
