@@ -28,8 +28,8 @@ jobs:
 
       - name: Проверить форматирование Go
         run: |
-          gofmt -d cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go
-          unformatted="$(gofmt -l cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go)"
+          gofmt -d cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/gate/*.go
+          unformatted="$(gofmt -l cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
             exit 1
