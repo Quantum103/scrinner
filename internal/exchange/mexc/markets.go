@@ -143,6 +143,10 @@ func (a *Adapter) discoverMarkets(ctx context.Context) ([]market.Market, error) 
 		}
 	}
 
+	if len(markets) == 0 {
+		return nil, fmt.Errorf("MEXC Spot/Futures API вернул ноль поддерживаемых USDT-рынков")
+	}
+
 	a.mu.Lock()
 	a.contractSizes = contractSizes
 	a.mu.Unlock()
