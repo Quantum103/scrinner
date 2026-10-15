@@ -45,13 +45,10 @@ func TestOKXLivePublicAPI(t *testing.T) {
 			t.Errorf("адаптер вернул невалидный тикер: %#v", ticker)
 			continue
 		}
-		switch {
-		case ticker.MarketType == market.MarketTypeSpot && ticker.ContractType == market.ContractTypeSpot:
+		switch ticker.MarketType {
+		case market.MarketTypeSpot:
 			spotTickers++
-		case ticker.MarketType == market.MarketTypeFutures && ticker.ContractType == market.ContractTypePerpetual:
-			swapTickers++
-			spotTickers++
-		case ticker.MarketType == market.MarketTypeFutures:
+		case market.MarketTypeFutures:
 			swapTickers++
 		}
 	}
