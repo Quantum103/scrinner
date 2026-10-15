@@ -31,7 +31,7 @@ type ExchangesConfig struct {
 	Bybit   ExchangeConfig `yaml:"bybit"`
 	MEXC    ExchangeConfig `yaml:"mexc"`
 	OKX     OKXConfig       `yaml:"okx"`
-	Gate    ExchangeConfig `yaml:"gate"`
+	Gate    GateConfig     `yaml:"gate"`
 	Bitget  ExchangeConfig `yaml:"bitget"`
 }
 
@@ -42,6 +42,12 @@ type ExchangeConfig struct {
 
 // OKXConfig содержит настройки публичного API OKX.
 type OKXConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	BaseURL string `yaml:"base_url"`
+}
+
+// GateConfig содержит настройки публичного API Gate.
+type GateConfig struct {
 	Enabled bool   `yaml:"enabled"`
 	BaseURL string `yaml:"base_url"`
 }

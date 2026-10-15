@@ -21,6 +21,8 @@ exchanges:
 
   gate:
     enabled: false
+    # Необязательно; по умолчанию https://api.gateio.ws
+    # base_url: https://api.gateio.ws
 
   bitget:
     enabled: false
