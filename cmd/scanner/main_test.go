@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -56,7 +57,7 @@ func TestRunMEXCPassStoresSpotAndPerpetualSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	logger := slog.New(slog.NewTextHandler(testLogWriter{t}, nil))
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	adapter := mexc.New(client, logger)
 
 	if err := runMEXCPassWithAdapter(ctx, logger, db, adapter); err != nil {
@@ -163,11 +164,3 @@ func TestRunMEXCPassDisabledDoesNotCreateClientOrUseDatabase(t *testing.T) {
 	}
 }
 
-type testLogWriter struct {
-	t *testing.T
-}
-
-func (w testLogWriter) Write(data []byte) (int, error) {
-	w.t.Log(strings.TrimSpace(string(data)))
-	return len(data), nil
-}
