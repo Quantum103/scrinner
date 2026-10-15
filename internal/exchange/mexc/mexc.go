@@ -17,8 +17,8 @@ type Adapter struct {
 	client *Client
 	logger *slog.Logger
 
-	mu             sync.RWMutex
-	contractSizes  map[string]decimal.Decimal
+	mu            sync.RWMutex
+	contractSizes map[string]decimal.Decimal
 }
 
 var _ exchange.Exchange = (*Adapter)(nil)
