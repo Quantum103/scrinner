@@ -1,0 +1,26 @@
+scanner:
+  interval: 30s
+  min_spread_percent: 1.0
+  max_data_age: 10s
+
+exchanges:
+  binance:
+    enabled: true
+
+  bybit:
+    enabled: true
+
+  mexc:
+    enabled: true
+
+  okx:
+    enabled: true
+
+  gate:
+    enabled: true
+
+  bitget:
+    enabled: true
+
+database:
+  path: ./data/arbitrage.db
