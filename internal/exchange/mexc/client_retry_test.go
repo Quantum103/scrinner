@@ -15,6 +15,7 @@ func TestFuturesEnvelopeRejectsMissingSuccessAndData(t *testing.T) {
 	for _, body := range []string{
 		`{"code":0,"data":[]}`,
 		`{"success":true,"code":0}`,
+		`{"success":true,"data":[]}`,
 		`{"success":false,"code":700,"message":"contract unavailable"}`,
 	} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
