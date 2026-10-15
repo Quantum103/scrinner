@@ -1,0 +1,35 @@
+name: Stage 8 baseline checks (temporary)
+
+on:
+  push:
+    branches:
+      - "feat/stage-8-gate-adapter"
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: Проверка исходного состояния до Stage 8
+    runs-on: ubuntu-latest
+    steps:
+      - name: Получить исходный код
+        uses: actions/checkout@v4
+      - name: Установить Go из go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Проверить gofmt до Stage 8
+        run: |
+          unformatted="$(gofmt -l cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go)"
+          if [ -n "$unformatted" ]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+      - name: Запустить базовые тесты
+        run: go test ./...
+      - name: Запустить базовый go vet
+        run: go vet ./...
+      - name: Проверить базовую сборку
+        run: go build ./...
