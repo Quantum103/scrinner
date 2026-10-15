@@ -201,3 +201,43 @@ func TestFuturesTickerSkipsMalformedTimestamp(t *testing.T) {
 		t.Fatalf("котировка с некорректным timestamp должна быть пропущена: tickers=%#v stats=%#v", tickers, stats)
 	}
 }
+
+// TestCollectTickersRejectsEmptyBulkResponses проверяет, что пустой ответ котировок не выглядит успешным.
+func TestCollectTickersRejectsEmptyBulkResponses(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		market market.Market
+		path   string
+		body   string
+	}{
+		{
+			name: "Spot",
+			market: market.Market{Exchange: "mexc", Symbol: "BTCUSDT", BaseAsset: "BTC", QuoteAsset: "USDT", MarketType: market.MarketTypeSpot, ContractType: market.ContractTypeSpot, Active: true},
+			path: spotBookTickerEndpoint,
+			body: `[]`,
+		},
+		{
+			name: "Futures",
+			market: market.Market{Exchange: "mexc", Symbol: "BTC_USDT", BaseAsset: "BTC", QuoteAsset: "USDT", MarketType: market.MarketTypeFutures, ContractType: market.ContractTypePerpetual, Active: true},
+			path: futuresTickerEndpoint,
+			body: `{"success":true,"code":0,"data":[]}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == tc.path {
+					_, _ = w.Write([]byte(tc.body))
+					return
+				}
+				t.Fatalf("неожиданный endpoint %s", r.URL.Path)
+			}))
+			defer server.Close()
+
+			adapter := New(testClient(t, server.URL, 0), nil)
+			_, _, err := adapter.CollectTickersWithStats(context.Background(), []market.Market{tc.market})
+			if err == nil {
+				t.Fatal("пустой bulk ticker не должен считаться успешным")
+			}
+		})
+	}
+}
