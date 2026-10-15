@@ -267,12 +267,16 @@ func decodeFuturesEnvelope(body []byte, target any, operation, endpoint string) 
 	}
 	if !*envelope.Success || (codePresent && code != 0) {
 		return &APIError{
-			Exchange:  "mexc",
-			Operation: operation,
-			Endpoint:  endpoint,
-			Code:      code,
-			Message:   nonEmptyMessage(message, "API вернул success=false"),
+			Exchange:   "mexc",
+			Operation:  operation,
+			Endpoint:   endpoint,
+			HTTPStatus: http.StatusOK,
+			Code:       code,
+			Message:    nonEmptyMessage(message, "API вернул success=false"),
 		}
+	}
+	if !codePresent {
+		return fmt.Errorf("MEXC Futures %s: ответ не содержит code", operation)
 	}
 	if len(envelope.Data) == 0 || strings.TrimSpace(string(envelope.Data)) == "null" {
 		return fmt.Errorf("MEXC Futures %s: ответ не содержит data", operation)
@@ -299,11 +303,12 @@ func checkSpotAPIError(body []byte, operation, endpoint string) error {
 	if (response.Success != nil && !*response.Success) ||
 		(codePresent && code != 0) {
 		return &APIError{
-			Exchange:  "mexc",
-			Operation: operation,
-			Endpoint:  endpoint,
-			Code:      code,
-			Message:   nonEmptyMessage(message, "API вернул ошибку в HTTP 200"),
+			Exchange:   "mexc",
+			Operation:  operation,
+			Endpoint:   endpoint,
+			HTTPStatus: http.StatusOK,
+			Code:       code,
+			Message:    nonEmptyMessage(message, "API вернул ошибку в HTTP 200"),
 		}
 	}
 	return nil
