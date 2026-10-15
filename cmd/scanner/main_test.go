@@ -163,4 +163,3 @@ func TestRunMEXCPassDisabledDoesNotCreateClientOrUseDatabase(t *testing.T) {
 		t.Fatalf("выключенный MEXC должен пропускаться без ошибки: %v", err)
 	}
 }
-
