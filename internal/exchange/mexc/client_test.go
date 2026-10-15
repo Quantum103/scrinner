@@ -94,10 +94,10 @@ type jsonRawTarget struct {
 
 func TestClientRetries429And5xxButNot418(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
+		name        string
 		firstStatus int
-		retries    int
-		wantCalls  int32
+		retries     int
+		wantCalls   int32
 	}{
 		{name: "429", firstStatus: http.StatusTooManyRequests, retries: 1, wantCalls: 2},
 		{name: "5xx", firstStatus: http.StatusServiceUnavailable, retries: 1, wantCalls: 2},
