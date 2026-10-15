@@ -26,6 +26,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Проверить форматирование Go
+        run: |
+          unformatted="$(gofmt -l $(git ls-files '*.go'))"
+          if [ -n "$unformatted" ]; then
+            printf 'Неформатированные Go-файлы:\\n%s\\n' "$unformatted"
+            exit 1
+          fi
+
       - name: Запустить unit-тесты
         run: go test ./...
 
