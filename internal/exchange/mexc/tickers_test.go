@@ -142,7 +142,6 @@ func TestCollectTickersRejectsNullBookTicker(t *testing.T) {
 	}
 }
 
-
 // TestMissingVolumesRemainUnknown проверяет, что отсутствующий объём не подменяется оборотом.
 func TestMissingVolumesRemainUnknown(t *testing.T) {
 	now := time.Now().UTC()
@@ -150,7 +149,7 @@ func TestMissingVolumesRemainUnknown(t *testing.T) {
 		"BTCUSDT": {Exchange: "mexc", Symbol: "BTCUSDT", BaseAsset: "BTC", QuoteAsset: "USDT", MarketType: market.MarketTypeSpot, ContractType: market.ContractTypeSpot, Active: true},
 	}
 	spotBook := spotTickerList{{
-		Symbol: "BTCUSDT",
+		Symbol:   "BTCUSDT",
 		BidPrice: json.RawMessage(`"1.00"`),
 		AskPrice: json.RawMessage(`"1.01"`),
 	}}
@@ -166,11 +165,11 @@ func TestMissingVolumesRemainUnknown(t *testing.T) {
 		"BTC_USDT": {Exchange: "mexc", Symbol: "BTC_USDT", BaseAsset: "BTC", QuoteAsset: "USDT", MarketType: market.MarketTypeFutures, ContractType: market.ContractTypePerpetual, Active: true},
 	}
 	futuresBook := futuresTickerList{{
-		Symbol: "BTC_USDT",
-		Bid1: json.RawMessage("1.00"),
-		Ask1: json.RawMessage("1.01"),
-		Volume24: json.RawMessage("100"),
-		Amount24: json.RawMessage("999999"),
+		Symbol:    "BTC_USDT",
+		Bid1:      json.RawMessage("1.00"),
+		Ask1:      json.RawMessage("1.01"),
+		Volume24:  json.RawMessage("100"),
+		Amount24:  json.RawMessage("999999"),
 		Timestamp: json.RawMessage("1792050000123"),
 	}}
 	futuresTickers, futuresStats, err := buildFuturesTickers(futuresBook, futuresMarkets, map[string]decimal.Decimal{}, now)
@@ -189,9 +188,9 @@ func TestFuturesTickerSkipsMalformedTimestamp(t *testing.T) {
 		"BTC_USDT": {Exchange: "mexc", Symbol: "BTC_USDT", BaseAsset: "BTC", QuoteAsset: "USDT", MarketType: market.MarketTypeFutures, ContractType: market.ContractTypePerpetual, Active: true},
 	}
 	book := futuresTickerList{{
-		Symbol: "BTC_USDT",
-		Bid1: json.RawMessage("1"),
-		Ask1: json.RawMessage("2"),
+		Symbol:    "BTC_USDT",
+		Bid1:      json.RawMessage("1"),
+		Ask1:      json.RawMessage("2"),
 		Timestamp: json.RawMessage(`"not-a-timestamp"`),
 	}}
 	tickers, stats, err := buildFuturesTickers(book, requested, map[string]decimal.Decimal{}, now)
