@@ -158,7 +158,7 @@ func TestRunMEXCPassStoresSpotAndPerpetualSnapshots(t *testing.T) {
 }
 
 func TestRunMEXCPassDisabledDoesNotCreateClientOrUseDatabase(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(testLogWriter{t}, nil))
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	if err := runMEXCPassIfEnabled(context.Background(), false, logger, nil); err != nil {
 		t.Fatalf("выключенный MEXC должен пропускаться без ошибки: %v", err)
 	}
