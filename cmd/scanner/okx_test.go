@@ -89,7 +89,7 @@ func TestRunOKXPassStoresSpotAndSwapInExistingSQLite(t *testing.T) {
 		switch marketType {
 		case "spot":
 			seenSpot = true
-			if symbol != "BTC-USDT" || contractType != "spot" || exchangeTime.Valid {
+			if symbol != "BTC-USDT" || contractType != "spot" || !exchangeTime.Valid {
 				t.Fatalf("неверно сохранён Spot: %s %s %s exchangeTime=%#v", symbol, marketType, contractType, exchangeTime)
 			}
 			wantBid, _ := decimal.NewFromString("65000.123456789123")
