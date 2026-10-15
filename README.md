@@ -1,37 +1,64 @@
 # Crypto Arbitrage Scanner
 
-Research-oriented cross-exchange cryptocurrency market scanner written in Go. The application is read-only and does not execute trades.
+Исследовательский scanner межбиржевого криптовалютного арбитража на Go. Приложение работает только на чтение публичных рыночных данных, не использует API keys и не выполняет торговые операции.
 
-## Supported market types
+## Поддерживаемые рынки
 
-- Spot markets quoted in USDT.
-- USDT-margined perpetual futures.
+- Spot с котируемым активом USDT.
+- Бессрочные USDⓈ-M Futures с маржой и расчётами в USDT.
 
-## Planned exchanges
+## Текущий этап: Stage 5 — адаптеры Bybit и Binance
 
-The longer-term plan includes Binance, Bybit, MEXC, OKX, Gate and Bitget. At the current stage, only the Bybit V5 public REST adapter is implemented.
+Адаптеры преобразуют метаданные рынков и лучшие bid/ask в общие внутренние структуры, а рынки и снимки цен записываются в SQLite через существующий storage layer.
 
-## Current stage: Stage 4 — Bybit adapter
+### Официальные endpoints Bybit V5
 
-The adapter receives structured market metadata, applies the internal Stage 3 market normalizer, fetches best bid/ask and 24-hour volume, and stores markets and price snapshots in SQLite.
+- `GET /v5/market/instruments-info?category=spot` — Spot-инструменты; отбираются активные рынки со статусом `Trading`. Документация: https://bybit-exchange.github.io/docs/v5/market/instrument
+- `GET /v5/market/instruments-info?category=linear` — Linear-инструменты; используется pagination через `nextPageCursor`. Оставляются только `Trading`, `LinearPerpetual`, `quoteCoin=USDT`, `settleCoin=USDT`. Документация: https://bybit-exchange.github.io/docs/v5/market/instrument
+- `GET /v5/market/tickers?category=spot` и `GET /v5/market/tickers?category=linear` — лучшие bid/ask и поле `volume24h`, которое представляет объём базового актива. Время ответа API используется как timestamp для этих категорий. Документация: https://bybit-exchange.github.io/docs/v5/market/tickers
+- Временные HTTP/API ошибки обрабатываются с ограниченными повторами. Документация по ограничениям: https://bybit-exchange.github.io/docs/v5/rate-limit
 
-Official Bybit API endpoints:
+### Официальные endpoints Binance
 
-- GET /v5/market/instruments-info?category=spot — Spot instruments. Spot does not use pagination; active instruments are selected by status=Trading. Documentation: https://bybit-exchange.github.io/docs/v5/market/instrument
-- GET /v5/market/instruments-info?category=linear — Linear instruments. Requests use limit=1000 and follow nextPageCursor. Only status=Trading, contractType=LinearPerpetual and quoteCoin=USDT with settleCoin=USDT are retained. Documentation: https://bybit-exchange.github.io/docs/v5/market/instrument
-- GET /v5/market/tickers?category=spot — Spot tickers.
-- GET /v5/market/tickers?category=linear — Linear tickers. Both categories use bid1Price for BID, ask1Price for ASK and volume24h for the reported 24-hour base volume. The response-level time field supplies the timestamp. Documentation: https://bybit-exchange.github.io/docs/v5/market/tickers
-- Retry handling respects temporary HTTP/API errors and Bybit response rate-limit headers. Official rules: https://bybit-exchange.github.io/docs/v5/rate-limit
+- `GET /api/v3/exchangeInfo` — метаданные Spot-инструментов. Отбираются только активные Spot USDT рынки, где `status=TRADING` и `isSpotTradingAllowed=true`. Документация: https://developers.binance.com/docs/binance-spot-api-docs/rest-api/general-endpoints
+- `GET /fapi/v1/exchangeInfo` — метаданные USDⓈ-M Futures. Оставляются только `status=TRADING`, `contractType=PERPETUAL`, `quoteAsset=USDT` и `marginAsset=USDT`; срочные контракты исключаются. Документация: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Exchange-Information
+- `GET /api/v3/ticker/bookTicker` — массовое получение лучших Spot `bidPrice` и `askPrice`. Этот ответ не содержит времени формирования котировки, поэтому `Timestamp` использует локальное время получения, а `ExchangeTimestamp` остаётся пустым. Документация: https://developers.binance.com/docs/binance-spot-api-docs/rest-api/market-data-endpoints
+- `GET /fapi/v1/ticker/bookTicker` — массовое получение лучших Futures `bidPrice` и `askPrice`; поле `time`, если оно есть и корректно, сохраняется как время биржи. Документация: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Symbol-Price-Ticker
+- `GET /api/v3/ticker/24hr` — Spot-объём за 24 часа. Запросы с `symbols` выполняются пакетами по максимум 100 символов. Поле `volume` представляет объём базового актива; `quoteVolume` намеренно не подменяет его. Документация: https://developers.binance.com/docs/binance-spot-api-docs/rest-api/market-data-endpoints
+- `GET /fapi/v1/ticker/24hr` — USDⓈ-M Futures-объём за 24 часа; для согласованности используется поле `volume` (объём базового актива), а не `quoteVolume`. Документация: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/24hr-Ticker-Price-Change-Statistics
 
-The public adapter does not require API keys, does not make trading requests, and uses decimal arithmetic for price and volume values. Unit tests use httptest and do not require live Bybit access. The separately tagged integration test requires external API access.
+Binance использует публичные endpoints без API keys. HTTP-клиент повторно использует соединения, применяет timeout, учитывает отмену context, ограничивает размер ответа и количество retry. HTTP 418 не повторяется, чтобы не усиливать временную блокировку.
 
-## Run
+### Timestamp и точность
 
-Run these commands from the repository root:
+- Финансовые поля цены и объёма разбираются с помощью `shopspring/decimal`, без преобразования в `float64`.
+- `Timestamp` — временная точка снимка, которую использует существующая история цен.
+- `ReceivedAt` — локальное UTC-время получения ответа.
+- `ExchangeTimestamp` — время котировки, предоставленное биржей, либо `NULL`, если endpoint его не сообщает.
+- В SQLite добавляется миграция `002_price_snapshot_timestamps.sql`; существующие строки остаются совместимыми благодаря nullable полям.
 
-- go test ./...
-- go vet ./...
-- go run ./cmd/scanner
-- go test -tags=integration ./internal/exchange/bybit/... — optional live API test; requires network access to Bybit.
+## Конфигурация
 
-The public API can return HTTP 403 if access from the current network or region is blocked. Such errors are reported; the adapter does not generate substitute market data.
+В `configs/config.yaml` адаптеры включаются независимо:
+
+```yaml
+exchanges:
+  binance:
+    enabled: true
+  bybit:
+    enabled: true
+```
+
+Выключенный адаптер не обращается к API. Если включены обе биржи, обычный запуск выполняет один проход для Bybit и один для Binance. Постоянный scheduler и arbitrage detector в Stage 5 не добавляются.
+
+## Запуск и проверки
+
+Запускать из корня репозитория:
+
+```bash
+go test ./...
+go vet ./...
+go run ./cmd/scanner
+```
+
+Unit-тесты используют `httptest` и не требуют публичного доступа к биржам. Если сеть ограничивает доступ к API, адаптер вернёт ошибку и не будет создавать фиктивные рыночные данные.

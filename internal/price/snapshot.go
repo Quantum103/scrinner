@@ -20,7 +20,18 @@ type Ticker struct {
 
 	Volume24h *decimal.Decimal
 
+	// Timestamp задаёт временную точку снимка, используемую существующим storage.
+	// Семантика зависит от endpoint: для Binance Spot это время получения ответа,
+	// а для USDⓈ-M Futures — время из ответа, если поле time присутствует.
 	Timestamp time.Time
+
+	// ReceivedAt задаёт локальное UTC-время получения ответа с тикером.
+	// Поле может оставаться нулевым у адаптеров, которые ещё не заполняют его.
+	ReceivedAt time.Time
+
+	// ExchangeTimestamp содержит время котировки от биржи, если endpoint предоставляет его.
+	// nil означает, что точное время биржевого обновления неизвестно.
+	ExchangeTimestamp *time.Time
 }
 
 // IsValid проверяет, содержит ли тикер корректные рыночные данные.
@@ -49,7 +60,7 @@ func (t Ticker) IsValid() bool {
 	return true
 }
 
-// Age возвращает возраст тикера относительно указанного момента времени.
+// Age возвращает возраст временной точки тикера относительно указанного момента времени.
 func (t Ticker) Age(now time.Time) time.Duration {
 	if t.Timestamp.IsZero() {
 		return 0
