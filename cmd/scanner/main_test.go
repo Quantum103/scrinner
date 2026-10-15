@@ -49,10 +49,10 @@ func TestRunMEXCPassStoresSpotAndPerpetualSnapshots(t *testing.T) {
 	}
 
 	client, err := mexc.NewClient(mexc.ClientConfig{
-		SpotBaseURL: server.URL,
+		SpotBaseURL:    server.URL,
 		FuturesBaseURL: server.URL,
-		HTTPClient: &http.Client{Timeout: time.Second},
-		MaxRetries: 0,
+		HTTPClient:     &http.Client{Timeout: time.Second},
+		MaxRetries:     0,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -86,13 +86,13 @@ func TestRunMEXCPassStoresSpotAndPerpetualSnapshots(t *testing.T) {
 	}
 
 	type storedSnapshot struct {
-		symbol             string
-		marketType         string
-		bid                string
-		ask                string
-		volume             sql.NullString
-		receivedAt         sql.NullString
-		exchangeTimestamp  sql.NullString
+		symbol            string
+		marketType        string
+		bid               string
+		ask               string
+		volume            sql.NullString
+		receivedAt        sql.NullString
+		exchangeTimestamp sql.NullString
 	}
 	rows, err := db.SQLDB().QueryContext(ctx, `
 		SELECT m.symbol, m.market_type, p.bid, p.ask, p.volume_24h, p.received_at, p.exchange_timestamp
