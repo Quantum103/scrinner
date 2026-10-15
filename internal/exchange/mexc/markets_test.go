@@ -130,3 +130,24 @@ func TestConvertMarketsUsesStructuredAssets(t *testing.T) {
 		t.Fatal("delivery-контракт не должен конвертироваться как perpetual")
 	}
 }
+
+
+func TestDiscoverMarketsRejectsEmptySupportedMarketSet(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case spotExchangeInfoEndpoint:
+			_, _ = w.Write([]byte(`{"symbols":[]}`))
+		case futuresContractInfoEndpoint:
+			_, _ = w.Write([]byte(`{"success":true,"code":0,"data":[]}`))
+		default:
+			t.Fatalf("неожиданный endpoint: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	adapter := New(testClient(t, server.URL, 0), nil)
+	markets, err := adapter.DiscoverMarkets(context.Background())
+	if err == nil || len(markets) != 0 || !strings.Contains(err.Error(), "ноль поддерживаемых") {
+		t.Fatalf("пустой набор рынков должен возвращать диагностируемую ошибку: markets=%#v err=%v", markets, err)
+	}
+}
