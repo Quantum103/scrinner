@@ -32,7 +32,7 @@ func TestClientSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if envelope.RetCode != 0 || result.Category != spotCategory {
+	if envelope.RetCode == nil || *envelope.RetCode != 0 || result.Category != spotCategory {
 		t.Fatalf("unexpected response: %#v %#v", envelope, result)
 	}
 }
@@ -60,6 +60,50 @@ func TestClientAPIError(t *testing.T) {
 	}
 	if apiErr.Code != 10001 || apiErr.Message != "invalid category" {
 		t.Fatalf("ошибка=%#v", apiErr)
+	}
+}
+
+func TestClientRejectsMissingRetCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"retMsg":"OK","result":{"category":"spot","list":[]},"time":1735809771618}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, MaxRetries: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.getJSON(context.Background(), "test", instrumentEndpoint, nil, &instrumentsResult{})
+	if err == nil {
+		t.Fatal("ожидалась ошибка отсутствующего retCode")
+	}
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.Message != "ответ не содержит retCode" {
+		t.Fatalf("неожиданная ошибка: %#v", err)
+	}
+}
+
+func TestClientRejectsMissingRetMsg(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"retCode":0,"result":{"category":"spot","list":[]},"time":1735809771618}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, MaxRetries: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.getJSON(context.Background(), "test", instrumentEndpoint, nil, &instrumentsResult{})
+	if err == nil {
+		t.Fatal("ожидалась ошибка отсутствующего retMsg")
+	}
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.Message != "ответ не содержит retMsg" {
+		t.Fatalf("неожиданная ошибка: %#v", err)
 	}
 }
 
