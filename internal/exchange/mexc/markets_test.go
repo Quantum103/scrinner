@@ -34,7 +34,9 @@ func TestDiscoverMarketsFiltersSpotAndUSDTPerpetual(t *testing.T) {
 					{"symbol":"ADA_USDT","baseCoin":"ADA","quoteCoin":"USDT","settleCoin":"USDT","futureType":1,"state":3,"type":1,"contractSize":1},
 					{"symbol":"XRP_USDT","baseCoin":"XRP","quoteCoin":"USDT","settleCoin":"USDT","futureType":1,"state":4,"type":1,"contractSize":1},
 					{"symbol":"DOGE_USDT","baseCoin":"DOGE","quoteCoin":"USDT","settleCoin":"BTC","futureType":1,"state":0,"type":1,"contractSize":1},
-					{"symbol":"LTC_USDT","baseCoin":"LTC","quoteCoin":"USDT","settleCoin":"USDT","futureType":1,"state":0,"type":2,"contractSize":1}
+					{"symbol":"LTC_USDT","baseCoin":"LTC","quoteCoin":"USDT","settleCoin":"USDT","futureType":1,"state":0,"type":2,"contractSize":1},
+					{"symbol":"BNB_USDT","baseCoin":"BNB","quoteCoin":"USDT","settleCoin":"USDT","futureType":1,"state":0,"type":1,"apiAllowed":false,"contractSize":1},
+					{"symbol":"DOT_USDT","baseCoin":"DOT","quoteCoin":"USDT","settleCoin":"USDT","futureType":1,"state":0,"type":1,"isHidden":true,"contractSize":1}
 				]
 			}`))
 		default:
