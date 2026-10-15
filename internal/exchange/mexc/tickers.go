@@ -94,8 +94,8 @@ func (a *Adapter) fetchSpotTickers(
 	if err != nil {
 		return nil, TickerStats{}, err
 	}
-	if book == nil {
-		return nil, TickerStats{}, fmt.Errorf("MEXC Spot bookTicker: ожидался массив или объект котировки")
+	if len(book) == 0 {
+		return nil, TickerStats{}, fmt.Errorf("MEXC Spot bookTicker: ответ не содержит котировок")
 	}
 
 	var statsResponse spotStatsList
@@ -146,8 +146,8 @@ func (a *Adapter) fetchFuturesTickers(
 	if err != nil {
 		return nil, TickerStats{}, err
 	}
-	if response == nil {
-		return nil, TickerStats{}, fmt.Errorf("MEXC Futures ticker: ответ не содержит data со списком котировок")
+	if len(response) == 0 {
+		return nil, TickerStats{}, fmt.Errorf("MEXC Futures ticker: ответ не содержит котировок")
 	}
 
 	a.mu.RLock()
