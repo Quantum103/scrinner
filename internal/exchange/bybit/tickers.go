@@ -31,17 +31,21 @@ func (a *Adapter) collectTickersWithStats(ctx context.Context, markets []market.
 	linearSymbols := make(map[string]struct{})
 
 	for _, m := range markets {
-		if !strings.EqualFold(strings.TrimSpace(m.Exchange), "bybit") || !m.IsSupported() {
+		normalized, err := market.NormalizeMarket(m)
+		if err != nil {
 			continue
 		}
-		symbol := strings.TrimSpace(m.Symbol)
+		if !strings.EqualFold(strings.TrimSpace(normalized.Exchange), "bybit") || !normalized.IsSupported() {
+			continue
+		}
+		symbol := strings.TrimSpace(normalized.Symbol)
 		if symbol == "" {
 			continue
 		}
-		if m.IsSpot() {
+		if normalized.IsSpot() {
 			spotSymbols[symbol] = struct{}{}
 		}
-		if m.IsPerpetual() {
+		if normalized.IsPerpetual() {
 			linearSymbols[symbol] = struct{}{}
 		}
 	}
@@ -89,6 +93,9 @@ func (a *Adapter) fetchTickers(ctx context.Context, category string, requested m
 	}
 	if !strings.EqualFold(strings.TrimSpace(result.Category), category) {
 		return nil, TickerStats{}, fmt.Errorf("exchange=bybit operation=get tickers %s: API вернул category=%q", category, result.Category)
+	}
+	if result.List == nil {
+		return nil, TickerStats{}, fmt.Errorf("exchange=bybit operation=get tickers %s: ответ не содержит result.list", category)
 	}
 	if envelope.Time <= 0 {
 		return nil, TickerStats{}, fmt.Errorf("exchange=bybit operation=get tickers %s: API вернул некорректный time=%d", category, envelope.Time)

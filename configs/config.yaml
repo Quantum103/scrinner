@@ -5,22 +5,22 @@ scanner:
 
 exchanges:
   binance:
-    enabled: true
+    enabled: false
 
   bybit:
     enabled: true
 
   mexc:
-    enabled: true
+    enabled: false
 
   okx:
-    enabled: true
+    enabled: false
 
   gate:
-    enabled: true
+    enabled: false
 
   bitget:
-    enabled: true
+    enabled: false
 
 database:
   path: ./data/arbitrage.db

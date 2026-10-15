@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -89,5 +90,60 @@ func TestFetchTickersRejectsMissingResponseTime(t *testing.T) {
 	_, _, err = adapter.fetchTickers(context.Background(), spotCategory, map[string]struct{}{"BTCUSDT": {}})
 	if err == nil {
 		t.Fatal("ожидалась ошибка некорректного timestamp")
+	}
+}
+
+func TestFetchTickersRejectsMissingList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"retCode":0,"retMsg":"OK","result":{"category":"spot"},"time":1735809771618}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := New(client, nil)
+
+	_, _, err = adapter.fetchTickers(context.Background(), spotCategory, map[string]struct{}{"BTCUSDT": {}})
+	if err == nil || !strings.Contains(err.Error(), "result.list") {
+		t.Fatalf("ожидалась ошибка отсутствующего списка тикеров, получено: %v", err)
+	}
+}
+
+func TestCollectTickersFiltersNonUSDTSpotMarket(t *testing.T) {
+	requestReceived := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestReceived = true
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := New(client, nil)
+
+	markets := []market.Market{
+		{
+			Exchange:     "bybit",
+			Symbol:       "BTCUSDC",
+			BaseAsset:    "BTC",
+			QuoteAsset:   "USDC",
+			MarketType:   market.MarketTypeSpot,
+			ContractType: market.ContractTypeSpot,
+			Active:       true,
+		},
+	}
+
+	tickers, stats, err := adapter.CollectTickersWithStats(context.Background(), markets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requestReceived {
+		t.Fatal("для неподдерживаемого Spot USDC не должен выполняться HTTP-запрос")
+	}
+	if len(tickers) != 0 || stats.Received != 0 || stats.Valid != 0 {
+		t.Fatalf("для USDC должны быть пустые результаты, tickers=%d stats=%#v", len(tickers), stats)
 	}
 }

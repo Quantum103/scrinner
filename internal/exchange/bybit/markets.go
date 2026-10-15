@@ -55,12 +55,13 @@ func (a *Adapter) discoverMarkets(ctx context.Context) ([]market.Market, error) 
 	return markets, nil
 }
 
-// fetchInstruments получает полный список инструментов категории.
+// fetchInstruments получает полный список инструментов категории с защитой от зацикливания pagination.
 func (a *Adapter) fetchInstruments(ctx context.Context, category string) ([]bybitInstrument, error) {
-	var all []bybitInstrument
+	all := make([]bybitInstrument, 0)
 	cursor := ""
+	seenCursors := make(map[string]struct{})
 
-	for page := 1; ; page++ {
+	for page := 1; page <= maxInstrumentPages; page++ {
 		query := url.Values{}
 		query.Set("category", category)
 		query.Set("status", tradingStatus)
@@ -80,6 +81,9 @@ func (a *Adapter) fetchInstruments(ctx context.Context, category string) ([]bybi
 		if !strings.EqualFold(strings.TrimSpace(result.Category), category) {
 			return nil, fmt.Errorf("exchange=bybit operation=get instruments %s: API вернул category=%q", category, result.Category)
 		}
+		if result.List == nil {
+			return nil, fmt.Errorf("exchange=bybit operation=get instruments %s: ответ не содержит result.list", category)
+		}
 		if envelope.Time <= 0 {
 			return nil, fmt.Errorf("exchange=bybit operation=get instruments %s: API вернул некорректный time=%d", category, envelope.Time)
 		}
@@ -87,20 +91,29 @@ func (a *Adapter) fetchInstruments(ctx context.Context, category string) ([]bybi
 		all = append(all, result.List...)
 
 		if category == spotCategory {
-			break
+			return all, nil
 		}
 
 		nextCursor := strings.TrimSpace(result.NextPageCursor)
 		if nextCursor == "" {
-			break
+			return all, nil
 		}
-		if nextCursor == cursor {
-			return nil, fmt.Errorf("exchange=bybit operation=get instruments %s: pagination cursor не изменился на странице %d", category, page)
+		if _, exists := seenCursors[nextCursor]; exists {
+			return nil, fmt.Errorf(
+				"exchange=bybit operation=get instruments %s: pagination повторно вернула cursor на странице %d",
+				category,
+				page,
+			)
 		}
+		seenCursors[nextCursor] = struct{}{}
 		cursor = nextCursor
 	}
 
-	return all, nil
+	return nil, fmt.Errorf(
+		"exchange=bybit operation=get instruments %s: превышен лимит pagination в %d страниц",
+		category,
+		maxInstrumentPages,
+	)
 }
 
 // isUSDTSpotInstrument проверяет Spot по структурированным полям API.
@@ -123,12 +136,15 @@ func isUSDTLinearPerpetual(instrument bybitInstrument) bool {
 
 // convertSpotInstrument преобразует структурированную Spot запись Bybit во внутренний Market.
 func convertSpotInstrument(instrument bybitInstrument) (market.Market, error) {
-	symbol := market.NewSymbol(instrument.BaseCoin, instrument.QuoteCoin)
-	if !symbol.IsValid() || symbol.QuoteAsset != usdtAsset || symbol.BaseAsset == usdtAsset {
-		return market.Market{}, fmt.Errorf("exchange=bybit operation=convert spot instrument symbol=%q: некорректные активы %q/%q", instrument.Symbol, instrument.BaseCoin, instrument.QuoteCoin)
+	if !isUSDTSpotInstrument(instrument) {
+		return market.Market{}, fmt.Errorf(
+			"exchange=bybit operation=convert spot instrument symbol=%q: инструмент не является активным Spot USDT",
+			instrument.Symbol,
+		)
 	}
 
-	return market.Market{
+	symbol := market.NewSymbol(instrument.BaseCoin, instrument.QuoteCoin)
+	result := market.Market{
 		Exchange:     "bybit",
 		Symbol:       instrument.Symbol,
 		BaseAsset:    symbol.BaseAsset,
@@ -136,17 +152,30 @@ func convertSpotInstrument(instrument bybitInstrument) (market.Market, error) {
 		MarketType:   market.MarketTypeSpot,
 		ContractType: market.ContractTypeSpot,
 		Active:       true,
-	}, nil
+	}
+
+	normalized, err := market.NormalizeMarket(result)
+	if err != nil {
+		return market.Market{}, fmt.Errorf(
+			"exchange=bybit operation=normalize spot market symbol=%q: %w",
+			instrument.Symbol,
+			err,
+		)
+	}
+	return normalized, nil
 }
 
 // convertLinearPerpetualInstrument преобразует Bybit LinearPerpetual во внутренний Market.
 func convertLinearPerpetualInstrument(instrument bybitInstrument) (market.Market, error) {
-	symbol := market.NewSymbol(instrument.BaseCoin, instrument.QuoteCoin)
-	if !symbol.IsValid() || symbol.QuoteAsset != usdtAsset || symbol.BaseAsset == usdtAsset {
-		return market.Market{}, fmt.Errorf("exchange=bybit operation=convert linear instrument symbol=%q: некорректные активы %q/%q", instrument.Symbol, instrument.BaseCoin, instrument.QuoteCoin)
+	if !isUSDTLinearPerpetual(instrument) {
+		return market.Market{}, fmt.Errorf(
+			"exchange=bybit operation=convert linear instrument symbol=%q: инструмент не является активным USDT-margined perpetual",
+			instrument.Symbol,
+		)
 	}
 
-	return market.Market{
+	symbol := market.NewSymbol(instrument.BaseCoin, instrument.QuoteCoin)
+	result := market.Market{
 		Exchange:     "bybit",
 		Symbol:       instrument.Symbol,
 		BaseAsset:    symbol.BaseAsset,
@@ -154,5 +183,15 @@ func convertLinearPerpetualInstrument(instrument bybitInstrument) (market.Market
 		MarketType:   market.MarketTypeFutures,
 		ContractType: market.ContractTypePerpetual,
 		Active:       true,
-	}, nil
+	}
+
+	normalized, err := market.NormalizeMarket(result)
+	if err != nil {
+		return market.Market{}, fmt.Errorf(
+			"exchange=bybit operation=normalize linear market symbol=%q: %w",
+			instrument.Symbol,
+			err,
+		)
+	}
+	return normalized, nil
 }

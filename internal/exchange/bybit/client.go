@@ -165,11 +165,10 @@ func (c *Client) getJSONAttempt(ctx context.Context, operation, endpoint string,
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
 	if err != nil {
 		return &APIError{
-			Exchange:   "bybit",
-			Operation:  operation,
-			Endpoint:   endpoint,
-			HTTPStatus: 0,
-			Message:    err.Error(),
+			Exchange:  "bybit",
+			Operation: operation,
+			Endpoint:  endpoint,
+			Message:   err.Error(),
 		}
 	}
 	request, err := c.httpClient.Do(req)
@@ -208,13 +207,34 @@ func (c *Client) getJSONAttempt(ctx context.Context, operation, endpoint string,
 		return fmt.Errorf("exchange=bybit operation=%s endpoint=%s разобрать JSON: %w", operation, endpoint, err)
 	}
 
-	if envelope.RetCode != 0 {
+	if envelope.RetCode == nil {
 		return &APIError{
 			Exchange:   "bybit",
 			Operation:  operation,
 			Endpoint:   endpoint,
 			HTTPStatus: request.StatusCode,
-			Code:       envelope.RetCode,
+			Message:    "ответ не содержит retCode",
+			RetryAfter: retryAfter,
+		}
+	}
+	if strings.TrimSpace(envelope.RetMsg) == "" {
+		return &APIError{
+			Exchange:   "bybit",
+			Operation:  operation,
+			Endpoint:   endpoint,
+			HTTPStatus: request.StatusCode,
+			Code:       *envelope.RetCode,
+			Message:    "ответ не содержит retMsg",
+			RetryAfter: retryAfter,
+		}
+	}
+	if *envelope.RetCode != 0 {
+		return &APIError{
+			Exchange:   "bybit",
+			Operation:  operation,
+			Endpoint:   endpoint,
+			HTTPStatus: request.StatusCode,
+			Code:       *envelope.RetCode,
 			Message:    envelope.RetMsg,
 			RetryAfter: retryAfter,
 		}
@@ -226,7 +246,7 @@ func (c *Client) getJSONAttempt(ctx context.Context, operation, endpoint string,
 			Operation:  operation,
 			Endpoint:   endpoint,
 			HTTPStatus: request.StatusCode,
-			Code:       envelope.RetCode,
+			Code:       *envelope.RetCode,
 			Message:    "ответ не содержит result",
 		}
 	}
