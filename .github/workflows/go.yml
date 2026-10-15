@@ -40,3 +40,40 @@ jobs:
 
       - name: Запустить go vet
         run: go vet ./...
+
+  live-smoke:
+    name: Однократная проверка публичного API MEXC
+    runs-on: ubuntu-latest
+    needs: test
+    continue-on-error: true
+    timeout-minutes: 3
+    steps:
+      - name: Получить исходный код
+        uses: actions/checkout@v4
+
+      - name: Установить Go из go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Включить только MEXC на время проверки
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("configs/config.yaml")
+          config = path.read_text(encoding="utf-8")
+          replacements = (
+              ("  binance:\n    enabled: true", "  binance:\n    enabled: false"),
+              ("  bybit:\n    enabled: true", "  bybit:\n    enabled: false"),
+              ("  mexc:\n    enabled: false", "  mexc:\n    enabled: true"),
+          )
+          for old, new in replacements:
+              if old not in config:
+                  raise SystemExit(f"Не найдена ожидаемая настройка: {old!r}")
+              config = config.replace(old, new, 1)
+          path.write_text(config, encoding="utf-8")
+          PY
+
+      - name: Выполнить один проход по публичному MEXC API
+        run: go run ./cmd/scanner
