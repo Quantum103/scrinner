@@ -58,7 +58,7 @@ func (a *Adapter) discoverMarkets(ctx context.Context) ([]market.Market, error) 
 			continue
 		}
 		if _, isETF := spotETFs[strings.ToUpper(strings.TrimSpace(pair.ID))]; isETF {
-			a.logger.Info("Gate ETF-пара исключена из обычной Spot-выборки", "pair", pair.ID)
+			a.logger.Debug("Gate ETF-пара исключена из обычной Spot-выборки", "pair", pair.ID)
 			continue
 		}
 		converted, supported, err := convertSpotPair(pair)
