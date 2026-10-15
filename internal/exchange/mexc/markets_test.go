@@ -131,7 +131,6 @@ func TestConvertMarketsUsesStructuredAssets(t *testing.T) {
 	}
 }
 
-
 func TestDiscoverMarketsRejectsEmptySupportedMarketSet(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
