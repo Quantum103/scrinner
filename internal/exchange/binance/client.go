@@ -44,6 +44,7 @@ type APIError struct {
 	Code       int
 	Message    string
 	RetryAfter time.Duration
+	retryAfterSet bool
 }
 
 // Error возвращает диагностическое описание ошибки API.
@@ -199,7 +200,7 @@ func (c *Client) getJSON(
 
 		receivedAt := time.Now().UTC()
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, c.maxResponseSize+1))
-		closeErr := resp.Body.Close()
+		_ = resp.Body.Close()
 		if readErr != nil {
 			if attempt < c.maxRetries && ctx.Err() == nil {
 				if err := waitRetry(ctx, c.retryDelay(attempt)); err != nil {
@@ -208,9 +209,6 @@ func (c *Client) getJSON(
 				continue
 			}
 			return time.Time{}, fmt.Errorf("прочитать ответ Binance %s: %w", operation, readErr)
-		}
-		if closeErr != nil {
-			// Ошибка Close не меняет уже прочитанное тело ответа.
 		}
 		if int64(len(body)) > c.maxResponseSize {
 			return time.Time{}, fmt.Errorf(
@@ -223,9 +221,9 @@ func (c *Client) getJSON(
 		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 			apiErr := buildAPIError(operation, endpoint, resp.StatusCode, resp.Header, body)
 			if attempt < c.maxRetries && apiErr.IsRetryable() {
-				delay := apiErr.RetryAfter
-				if delay <= 0 {
-					delay = c.retryDelay(attempt)
+				delay := c.retryDelay(attempt)
+				if apiErr.retryAfterSet {
+					delay = apiErr.RetryAfter
 				}
 				if err := waitRetry(ctx, delay); err != nil {
 					return time.Time{}, err
@@ -254,13 +252,15 @@ func (e *APIError) IsRetryable() bool {
 }
 
 func buildAPIError(operation, endpoint string, status int, headers http.Header, body []byte) *APIError {
+	retryAfter, retryAfterSet := parseRetryAfter(headers.Get("Retry-After"), time.Now())
 	apiErr := &APIError{
-		Exchange:   "binance",
-		Operation:  operation,
-		Endpoint:   endpoint,
-		HTTPStatus: status,
-		Message:    responseMessage(body),
-		RetryAfter: parseRetryAfter(headers.Get("Retry-After"), time.Now()),
+		Exchange:      "binance",
+		Operation:     operation,
+		Endpoint:      endpoint,
+		HTTPStatus:    status,
+		Message:       responseMessage(body),
+		RetryAfter:    retryAfter,
+		retryAfterSet: retryAfterSet,
 	}
 
 	var payload apiErrorResponse
@@ -284,24 +284,25 @@ func responseMessage(body []byte) string {
 	return message
 }
 
-func parseRetryAfter(value string, now time.Time) time.Duration {
+func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return 0
+		return 0, false
 	}
 	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
 		if seconds <= 0 {
-			return 0
+			return 0, true
 		}
-		return time.Duration(seconds) * time.Second
+		return time.Duration(seconds) * time.Second, true
 	}
 	if retryAt, err := http.ParseTime(value); err == nil {
 		delay := retryAt.Sub(now)
 		if delay > 0 {
-			return delay
+			return delay, true
 		}
+		return 0, true
 	}
-	return 0
+	return 0, false
 }
 
 func (c *Client) retryDelay(attempt int) time.Duration {
