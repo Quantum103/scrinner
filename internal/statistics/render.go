@@ -54,7 +54,7 @@ func RenderCSV(w io.Writer, report Report) error {
 		return err
 	}
 	for _, metric := range report.Overall.Thresholds {
-		if err := write(append(append([]string{"overall_threshold", metric.ThresholdPercent, since, until, report.Timezone}, []string{
+		if err := write(append([]string{"overall_threshold", metric.ThresholdPercent, since, until, report.Timezone}, []string{
 			strconv.FormatInt(report.Observations, 10),
 			strconv.FormatInt(report.UniqueOpportunities, 10),
 			metric.ThresholdPercent,
@@ -71,7 +71,7 @@ func RenderCSV(w io.Writer, report Report) error {
 			strconv.FormatInt(metric.MedianEpisodeDurationSeconds, 10),
 			strconv.FormatInt(metric.MaxEpisodeDurationSeconds, 10),
 			strconv.FormatBool(metric.CoverageComplete),
-		}...))); err != nil {
+		}...)); err != nil {
 			return err
 		}
 	}
