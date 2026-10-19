@@ -239,7 +239,6 @@ func fakeTicker(m market.Market, bid, ask string, now time.Time) price.Ticker {
 	}
 }
 
-
 // TestRunnerClassifiesEmptyResponsesAndCompleteExchangeFailure проверяет, что пустые ответы не маскируются под успешный сбор.
 func TestRunnerClassifiesEmptyResponsesAndCompleteExchangeFailure(t *testing.T) {
 	t.Run("empty tickers", func(t *testing.T) {
@@ -438,7 +437,6 @@ func TestRunnerRunStartsImmediatelyAndStopsOnCancellation(t *testing.T) {
 		t.Fatalf("после завершения не должен стартовать новый цикл")
 	}
 }
-
 
 // TestRunnerReportsOpportunityPersistenceFailureAfterSavingQuotes проверяет ошибку сохранения результата цикла.
 func TestRunnerReportsOpportunityPersistenceFailureAfterSavingQuotes(t *testing.T) {

@@ -33,47 +33,47 @@ type Config struct {
 
 // ExchangeStatus описывает результат опроса одной биржи в текущем цикле.
 type ExchangeStatus struct {
-	Name                 string
-	Markets              int
-	MetadataRefreshed    bool
-	TickersReceived      int
-	TickersAccepted      int
-	TickersRejected      int
-	SnapshotsSaved       int
-	FailureStage         string
-	Error                string
+	Name              string
+	Markets           int
+	MetadataRefreshed bool
+	TickersReceived   int
+	TickersAccepted   int
+	TickersRejected   int
+	SnapshotsSaved    int
+	FailureStage      string
+	Error             string
 }
 
 // CycleResult описывает частичный или полный результат цикла.
 type CycleResult struct {
-	ID                       string
-	Status                   string
-	StartedAt                time.Time
-	FinishedAt               time.Time
-	ExchangesEnabled         int
-	ExchangesSucceeded       int
-	ExchangesFailed          int
-	MarketsDiscovered        int
-	MetadataRefreshes        int
-	TickersReceived          int
-	TickersAccepted          int
-	TickersRejected          int
-	SnapshotsSaved           int
-	OpportunitiesDetected    int
-	OpportunitiesSaved       int
-	PersistenceErrors        int
-	Error                    string
-	Exchanges                []ExchangeStatus
+	ID                    string
+	Status                string
+	StartedAt             time.Time
+	FinishedAt            time.Time
+	ExchangesEnabled      int
+	ExchangesSucceeded    int
+	ExchangesFailed       int
+	MarketsDiscovered     int
+	MetadataRefreshes     int
+	TickersReceived       int
+	TickersAccepted       int
+	TickersRejected       int
+	SnapshotsSaved        int
+	OpportunitiesDetected int
+	OpportunitiesSaved    int
+	PersistenceErrors     int
+	Error                 string
+	Exchanges             []ExchangeStatus
 }
 
 const (
-	CycleStatusRunning           = "running"
-	CycleStatusSuccess           = "success"
-	CycleStatusPartial           = "partial"
-	CycleStatusNoData            = "no_data"
-	CycleStatusCollectionFailed  = "collection_failed"
-	CycleStatusSaveFailed        = "save_failed"
-	CycleStatusCancelled         = "cancelled"
+	CycleStatusRunning          = "running"
+	CycleStatusSuccess          = "success"
+	CycleStatusPartial          = "partial"
+	CycleStatusNoData           = "no_data"
+	CycleStatusCollectionFailed = "collection_failed"
+	CycleStatusSaveFailed       = "save_failed"
+	CycleStatusCancelled        = "cancelled"
 )
 
 const defaultMarketRefreshInterval = 15 * time.Minute
@@ -138,14 +138,14 @@ func NewRunner(
 }
 
 type exchangeBatch struct {
-	name             string
-	markets          []market.Market
-	tickers          []price.Ticker
-	tickersReceived  int
-	tickersRejected  int
+	name              string
+	markets           []market.Market
+	tickers           []price.Ticker
+	tickersReceived   int
+	tickersRejected   int
 	metadataRefreshed bool
-	failureStage     string
-	err              error
+	failureStage      string
+	err               error
 }
 
 // RunCycle параллельно получает котировки, сохраняет только свежие снимки и записывает историю возможностей.
