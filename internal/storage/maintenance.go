@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -372,7 +373,10 @@ func (d *DB) BackupTo(ctx context.Context, output string, force bool, migrations
 	}
 	published = true
 	result.Output = outputPath
-	if err := syncDirectory(directory); err != nil {
+	if runtime.GOOS == "windows" {
+		result.Warnings = append(result.Warnings,
+			"Файл резервной копии синхронизирован, но синхронизация метаданных каталога через стандартный API Go на Windows не выполнялась.")
+	} else if err := syncDirectory(directory); err != nil {
 		return result, fmt.Errorf("резервная копия проверена и создана, но не удалось синхронизировать каталог назначения: %w", err)
 	}
 	return result, nil

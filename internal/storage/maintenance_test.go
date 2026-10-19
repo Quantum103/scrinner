@@ -153,6 +153,16 @@ func TestBackupToRefusesOverwriteAndSameSourcePath(t *testing.T) {
 	if string(got) != string(sentinel) {
 		t.Fatal("существующий файл назначения был изменён")
 	}
+	forced, err := db.BackupTo(ctx, output, true, "../../migrations")
+	if err != nil {
+		t.Fatalf("явная замена через --force завершилась ошибкой: %v", err)
+	}
+	if !forced.Integrity.OK {
+		t.Fatalf("заменяющая копия не прошла проверку: %#v", forced.Integrity)
+	}
+	if report, err := CheckDatabase(ctx, output, "../../migrations"); err != nil || !report.OK {
+		t.Fatalf("опубликованный файл после --force не открывается: report=%#v err=%v", report, err)
+	}
 }
 
 func TestBackupToRejectsUnwritableDestinationDirectory(t *testing.T) {
