@@ -29,6 +29,13 @@ const defaultConfigPath = "configs/config.yaml"
 const defaultMigrationsPath = "migrations"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "stats" {
+		if err := runStatsCommand(os.Args[2:], os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "stats:", err)
+			os.Exit(2)
+		}
+		return
+	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 	logger.Info("starting crypto arbitrage scanner")

@@ -9,6 +9,9 @@ import (
 
 // Opportunity описывает одно историческое наблюдение валового ценового спреда.
 type Opportunity struct {
+	// CycleID связывает историческое наблюдение с конкретным циклом сканирования.
+	CycleID string
+
 	// Timestamp — локальное время обнаружения возможности.
 	Timestamp time.Time
 

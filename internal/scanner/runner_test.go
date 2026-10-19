@@ -146,6 +146,9 @@ func TestRunnerPersistsQuotesAndDetectsOpportunityDespiteOneExchangeFailure(t *t
 	if got.BuySnapshotID <= 0 || got.SellSnapshotID <= 0 {
 		t.Fatalf("возможность должна ссылаться на снимки, использованные для расчёта: %#v", got)
 	}
+	if got.CycleID == "" {
+		t.Fatalf("новое наблюдение должно содержать идентификатор цикла: %#v", got)
+	}
 	if !got.SpreadPercent.Equal(decimal.NewFromInt(2)) {
 		t.Fatalf("валовой спред = %s, ожидалось 2", got.SpreadPercent)
 	}

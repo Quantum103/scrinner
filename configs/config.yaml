@@ -29,3 +29,7 @@ exchanges:
 
 database:
   path: ./data/arbitrage.db
+
+stats:
+  timezone: UTC
+  max_observation_gap: 60s

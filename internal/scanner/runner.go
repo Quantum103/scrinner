@@ -168,6 +168,20 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 		StartedAt:        startedAt,
 		ExchangesEnabled: len(r.adapters),
 	}
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	if err := r.db.StartScanCycle(ctx, storage.ScanCycle{
+		ID: result.ID, StartedAt: result.StartedAt, EnabledExchanges: result.ExchangesEnabled,
+		MinSpreadPercent: r.config.MinSpreadPercent,
+	}); err != nil {
+		result.Status = CycleStatusSaveFailed
+		result.FinishedAt = time.Now().UTC()
+		result.Error = err.Error()
+		r.logCycle(result)
+		return result, fmt.Errorf("зарегистрировать начало цикла сканирования: %w", err)
+	}
+	var cycleFinalizeErr error
 	finish := func(status string) {
 		result.Status = status
 		result.FinishedAt = time.Now().UTC()
@@ -178,18 +192,34 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 			}
 		}
 		result.ExchangesSucceeded = len(result.Exchanges) - result.ExchangesFailed
+		saveCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		cycle := storage.ScanCycle{
+			ID: result.ID, StartedAt: result.StartedAt, FinishedAt: result.FinishedAt,
+			Status: result.Status, EnabledExchanges: result.ExchangesEnabled,
+			SucceededExchanges: result.ExchangesSucceeded, FailedExchanges: result.ExchangesFailed,
+			MarketsDiscovered: result.MarketsDiscovered, TickersReceived: result.TickersReceived,
+			TickersAccepted: result.TickersAccepted, TickersRejected: result.TickersRejected,
+			SnapshotsSaved: result.SnapshotsSaved, OpportunitiesDetected: result.OpportunitiesDetected,
+			OpportunitiesSaved: result.OpportunitiesSaved, PersistenceErrors: result.PersistenceErrors,
+			MinSpreadPercent: r.config.MinSpreadPercent, Error: result.Error,
+		}
+		if err := r.db.FinishScanCycle(saveCtx, cycle); err != nil {
+			cycleFinalizeErr = fmt.Errorf("сохранить итог цикла %s: %w", result.ID, err)
+			result.Status = CycleStatusSaveFailed
+			result.PersistenceErrors++
+			if result.Error == "" {
+				result.Error = cycleFinalizeErr.Error()
+			} else {
+				result.Error += "; " + cycleFinalizeErr.Error()
+			}
+		}
 		r.logCycle(result)
-	}
-
-	if err := ctx.Err(); err != nil {
-		result.Error = err.Error()
-		finish(CycleStatusCancelled)
-		return result, err
 	}
 	if len(r.adapters) == 0 {
 		result.Error = "нет включённых адаптеров бирж"
 		finish(CycleStatusNoData)
-		return result, nil
+		return result, cycleFinalizeErr
 	}
 
 	batches := r.collectInParallel(ctx, result.ID)
@@ -226,7 +256,7 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 		result.Exchanges = statuses
 		result.Error = err.Error()
 		finish(CycleStatusCancelled)
-		return result, err
+		return result, errors.Join(err, cycleFinalizeErr)
 	}
 
 	quotes := make([]arbitrage.Quote, 0)
@@ -336,17 +366,20 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 	if err := ctx.Err(); err != nil {
 		result.Error = err.Error()
 		finish(CycleStatusCancelled)
-		return result, err
+		return result, errors.Join(err, cycleFinalizeErr)
 	}
 
 	opportunities := r.detector.Detect(quotes, time.Now().UTC())
 	result.OpportunitiesDetected = len(opportunities)
 	if len(opportunities) > 0 {
+		for i := range opportunities {
+			opportunities[i].CycleID = result.ID
+		}
 		if err := storage.NewOpportunityRepository(r.db).InsertOpportunities(ctx, opportunities); err != nil {
 			result.Error = fmt.Sprintf("сохранить найденные возможности: %v", err)
 			result.PersistenceErrors++
 			finish(CycleStatusSaveFailed)
-			return result, fmt.Errorf("сохранить найденные возможности: %w", err)
+			return result, errors.Join(fmt.Errorf("сохранить найденные возможности: %w", err), cycleFinalizeErr)
 		}
 		result.OpportunitiesSaved = len(opportunities)
 	}
@@ -372,7 +405,7 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 	default:
 		finish(CycleStatusSuccess)
 	}
-	return result, nil
+	return result, cycleFinalizeErr
 }
 
 // logCycle выводит сводку цикла без перечисления всех тикеров.

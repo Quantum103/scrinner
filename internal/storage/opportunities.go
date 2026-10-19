@@ -166,7 +166,8 @@ func (r *OpportunityRepository) GetRecentOpportunities(
 			buy_symbol,
 			sell_symbol,
 			buy_snapshot_id,
-			sell_snapshot_id
+			sell_snapshot_id,
+			cycle_id
 		 FROM opportunities
 		 ORDER BY timestamp DESC, id DESC
 		 LIMIT ?`,
@@ -202,7 +203,8 @@ func (r *OpportunityRepository) GetOpportunitiesBySymbol(
 			buy_symbol,
 			sell_symbol,
 			buy_snapshot_id,
-			sell_snapshot_id
+			sell_snapshot_id,
+			cycle_id
 		 FROM opportunities
 		 WHERE symbol = ?
 		   AND timestamp >= ?
@@ -241,7 +243,8 @@ func (r *OpportunityRepository) GetOpportunitiesByPeriod(
 			buy_symbol,
 			sell_symbol,
 			buy_snapshot_id,
-			sell_snapshot_id
+			sell_snapshot_id,
+			cycle_id
 		 FROM opportunities
 		 WHERE timestamp >= ?
 		   AND timestamp <= ?
@@ -280,7 +283,8 @@ func (r *OpportunityRepository) GetOpportunitiesByExchanges(
 			buy_symbol,
 			sell_symbol,
 			buy_snapshot_id,
-			sell_snapshot_id
+			sell_snapshot_id,
+			cycle_id
 		 FROM opportunities
 		 WHERE buy_exchange = ?
 		   AND sell_exchange = ?
@@ -322,7 +326,8 @@ func (r *OpportunityRepository) GetOpportunitiesBySpread(
 			buy_symbol,
 			sell_symbol,
 			buy_snapshot_id,
-			sell_snapshot_id
+			sell_snapshot_id,
+			cycle_id
 		 FROM opportunities
 		 WHERE timestamp >= ?
 		   AND timestamp <= ?
@@ -429,6 +434,7 @@ func scanOpportunity(
 	var spread string
 	var buySymbol, sellSymbol sql.NullString
 	var buySnapshotID, sellSnapshotID sql.NullInt64
+	var cycleID sql.NullString
 
 	if err := s.Scan(
 		&timestamp,
@@ -450,6 +456,7 @@ func scanOpportunity(
 		&sellSymbol,
 		&buySnapshotID,
 		&sellSnapshotID,
+		&cycleID,
 	); err != nil {
 		return arbitrage.Opportunity{}, fmt.Errorf(
 			"прочитать opportunity: %w",
@@ -472,6 +479,9 @@ func scanOpportunity(
 	}
 	if buySnapshotID.Valid {
 		opportunity.BuySnapshotID = buySnapshotID.Int64
+	}
+	if cycleID.Valid {
+		opportunity.CycleID = cycleID.String
 	}
 	if sellSnapshotID.Valid {
 		opportunity.SellSnapshotID = sellSnapshotID.Int64

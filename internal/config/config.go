@@ -15,6 +15,7 @@ type Config struct {
 	Scanner   ScannerConfig   `yaml:"scanner"`
 	Exchanges ExchangesConfig `yaml:"exchanges"`
 	Database  DatabaseConfig  `yaml:"database"`
+	Stats     StatsConfig     `yaml:"stats"`
 }
 
 // ScannerConfig содержит настройки времени работы scanner.
@@ -53,6 +54,13 @@ type GateConfig struct {
 	BaseURL string `yaml:"base_url"`
 }
 
+// StatsConfig содержит настройки формирования исторических отчётов.
+type StatsConfig struct {
+	Timezone             string        `yaml:"timezone"`
+	MaxObservationGap    time.Duration `yaml:"-"`
+	MaxObservationGapRaw string        `yaml:"max_observation_gap"`
+}
+
 // DatabaseConfig содержит настройки SQLite.
 type DatabaseConfig struct {
 	Path string `yaml:"path"`
@@ -80,6 +88,10 @@ func Load(path string) (Config, error) {
 	}
 
 	if err := cfg.parseDurations(); err != nil {
+		return Config{}, err
+	}
+
+	if err := cfg.parseStats(); err != nil {
 		return Config{}, err
 	}
 
@@ -142,6 +154,32 @@ func (c *Config) parseDurations() error {
 
 	c.Scanner.MaxDataAge = maxDataAge
 
+	return nil
+}
+
+// parseStats применяет значения по умолчанию и проверяет настройки статистики.
+func (c *Config) parseStats() error {
+	if c.Stats.Timezone == "" {
+		c.Stats.Timezone = "UTC"
+	}
+	if _, err := time.LoadLocation(c.Stats.Timezone); err != nil {
+		return fmt.Errorf("stats.timezone %q: %w", c.Stats.Timezone, err)
+	}
+	if c.Stats.MaxObservationGapRaw == "" {
+		c.Stats.MaxObservationGap = 60 * time.Second
+		if candidate := 2 * c.Scanner.Interval; candidate > c.Stats.MaxObservationGap {
+			c.Stats.MaxObservationGap = candidate
+		}
+		return nil
+	}
+	gap, err := time.ParseDuration(c.Stats.MaxObservationGapRaw)
+	if err != nil {
+		return fmt.Errorf("разобрать stats.max_observation_gap %q: %w", c.Stats.MaxObservationGapRaw, err)
+	}
+	if gap <= 0 {
+		return errors.New("stats.max_observation_gap должен быть больше нуля")
+	}
+	c.Stats.MaxObservationGap = gap
 	return nil
 }
 
