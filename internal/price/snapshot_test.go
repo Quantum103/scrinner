@@ -27,15 +27,15 @@ func TestTickerIsFreshRequiresRecentReceiptAndSourceTimestamp(t *testing.T) {
 		mutate func(*Ticker)
 	}{
 		{
-			name: "receipt timestamp missing",
+			name:   "receipt timestamp missing",
 			mutate: func(t *Ticker) { t.ReceivedAt = time.Time{} },
 		},
 		{
-			name: "receipt timestamp stale",
+			name:   "receipt timestamp stale",
 			mutate: func(t *Ticker) { t.ReceivedAt = now.Add(-11 * time.Second) },
 		},
 		{
-			name: "primary timestamp stale",
+			name:   "primary timestamp stale",
 			mutate: func(t *Ticker) { t.Timestamp = now.Add(-11 * time.Second) },
 		},
 		{
@@ -46,11 +46,11 @@ func TestTickerIsFreshRequiresRecentReceiptAndSourceTimestamp(t *testing.T) {
 			},
 		},
 		{
-			name: "receipt timestamp in future",
+			name:   "receipt timestamp in future",
 			mutate: func(t *Ticker) { t.ReceivedAt = now.Add(time.Second) },
 		},
 		{
-			name: "primary timestamp in future",
+			name:   "primary timestamp in future",
 			mutate: func(t *Ticker) { t.Timestamp = now.Add(time.Second) },
 		},
 		{
