@@ -29,12 +29,25 @@ const defaultConfigPath = "configs/config.yaml"
 const defaultMigrationsPath = "migrations"
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "stats" {
-		if err := runStatsCommand(os.Args[2:], os.Stdout, os.Stderr); err != nil {
-			fmt.Fprintln(os.Stderr, "stats:", err)
+	if len(os.Args) > 1 {
+		var err error
+		switch os.Args[1] {
+		case "stats":
+			err = runStatsCommand(os.Args[2:], os.Stdout, os.Stderr)
+		case "backup":
+			err = runBackupCommand(os.Args[2:], os.Stdout, os.Stderr)
+		case "db-check":
+			err = runDBCheckCommand(os.Args[2:], os.Stdout, os.Stderr)
+		case "backup-check":
+			err = runBackupCheckCommand(os.Args[2:], os.Stdout, os.Stderr)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[1], err)
 			os.Exit(2)
 		}
-		return
+		if os.Args[1] == "stats" || os.Args[1] == "backup" || os.Args[1] == "db-check" || os.Args[1] == "backup-check" {
+			return
+		}
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
