@@ -101,10 +101,12 @@ func (a *Adapter) fetchTickers(ctx context.Context, category string, requested m
 		return nil, TickerStats{}, fmt.Errorf("exchange=bybit operation=get tickers %s: API вернул некорректный time=%d", category, envelope.Time)
 	}
 
-	timestamp := time.UnixMilli(envelope.Time).UTC()
-	if timestamp.IsZero() {
-		return nil, TickerStats{}, fmt.Errorf("exchange=bybit operation=get tickers %s: невозможно преобразовать time=%d", category, envelope.Time)
+	// Поле envelope.time относится ко времени ответа API в целом, а не к отдельной котировке.
+	// Поэтому для контроля свежести используем локальный момент получения и не выдаём server time за ts конкретного тикера.
+	if time.UnixMilli(envelope.Time).IsZero() {
+		return nil, TickerStats{}, fmt.Errorf("exchange=bybit operation=get tickers %s: невозможно проверить time=%d", category, envelope.Time)
 	}
+	receivedAt := time.Now().UTC()
 
 	stats := TickerStats{Received: len(result.List)}
 	validTickers := make([]price.Ticker, 0, len(result.List))
@@ -154,7 +156,8 @@ func (a *Adapter) fetchTickers(ctx context.Context, category string, requested m
 			Bid:          bid,
 			Ask:          ask,
 			Volume24h:    volume,
-			Timestamp:    timestamp,
+			Timestamp:    receivedAt,
+			ReceivedAt:   receivedAt,
 		}
 		if !ticker.IsValid() {
 			stats.Skipped++

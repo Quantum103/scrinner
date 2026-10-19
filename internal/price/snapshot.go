@@ -20,16 +20,14 @@ type Ticker struct {
 
 	Volume24h *decimal.Decimal
 
-	// Timestamp задаёт временную точку снимка, используемую существующим storage.
-	// Семантика зависит от endpoint: для Binance Spot это время получения ответа,
-	// а для USDⓈ-M Futures — время из ответа, если поле time присутствует.
+	// Timestamp — основная временная точка котировки по контракту текущего адаптера.
 	Timestamp time.Time
 
-	// ReceivedAt задаёт локальное UTC-время получения ответа с тикером.
-	// Поле может оставаться нулевым у адаптеров, которые ещё не заполняют его.
+	// ReceivedAt — локальное UTC-время получения HTTP-ответа с котировкой.
+	// Нулевое значение означает, что актуальность получения подтвердить нельзя.
 	ReceivedAt time.Time
 
-	// ExchangeTimestamp содержит время котировки от биржи, если endpoint предоставляет его.
+	// ExchangeTimestamp — временная метка рыночных данных от биржи, если она предоставляется.
 	// nil означает, что точное время биржевого обновления неизвестно.
 	ExchangeTimestamp *time.Time
 }
@@ -39,52 +37,61 @@ func (t Ticker) IsValid() bool {
 	if t.Exchange == "" || t.Symbol == "" {
 		return false
 	}
-
-	if !t.Bid.GreaterThan(decimal.Zero) {
+	if !t.Bid.GreaterThan(decimal.Zero) || !t.Ask.GreaterThan(decimal.Zero) {
 		return false
 	}
-
-	if !t.Ask.GreaterThan(decimal.Zero) {
-		return false
-	}
-
 	if t.Timestamp.IsZero() {
 		return false
 	}
-
 	// Пересечённый или инвертированный стакан не используется.
 	if t.Bid.GreaterThan(t.Ask) {
 		return false
 	}
-
 	return true
 }
 
-// Age возвращает возраст временной точки тикера относительно указанного момента времени.
+// Age возвращает возраст основной временной точки тикера.
 func (t Ticker) Age(now time.Time) time.Duration {
 	if t.Timestamp.IsZero() {
 		return 0
 	}
-
 	return now.Sub(t.Timestamp)
 }
 
-// IsFresh проверяет, не старше ли тикер допустимого возраста.
+// ObservationTime возвращает время данных, пригодное для сопоставления двух котировок.
+// Биржевая метка имеет приоритет; при её отсутствии используется локальное время получения.
+func (t Ticker) ObservationTime() time.Time {
+	if t.ExchangeTimestamp != nil && !t.ExchangeTimestamp.IsZero() {
+		return t.ExchangeTimestamp.UTC()
+	}
+	if !t.ReceivedAt.IsZero() {
+		return t.ReceivedAt.UTC()
+	}
+	return time.Time{}
+}
+
+// IsFresh проверяет возраст котировки, время получения и доступную биржевую метку.
+// Отсутствующее время получения не считается доказательством свежести.
 func (t Ticker) IsFresh(now time.Time, maxAge time.Duration) bool {
-	if !t.IsValid() {
+	if !t.IsValid() || now.IsZero() || maxAge <= 0 || t.ReceivedAt.IsZero() {
 		return false
 	}
-
-	if maxAge <= 0 {
+	if !timestampWithinAge(t.ReceivedAt, now, maxAge) {
 		return false
 	}
-
-	age := t.Age(now)
-
-	// Будущие временные метки также считаются некорректными.
-	if age < 0 {
+	if !timestampWithinAge(t.Timestamp, now, maxAge) {
 		return false
 	}
+	if t.ExchangeTimestamp != nil && !timestampWithinAge(*t.ExchangeTimestamp, now, maxAge) {
+		return false
+	}
+	return true
+}
 
-	return age <= maxAge
+func timestampWithinAge(timestamp, now time.Time, maxAge time.Duration) bool {
+	if timestamp.IsZero() {
+		return false
+	}
+	age := now.Sub(timestamp)
+	return age >= 0 && age <= maxAge
 }

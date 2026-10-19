@@ -92,22 +92,29 @@ func (r *PriceRepository) InsertPriceSnapshot(
 }
 
 // InsertPriceSnapshots сохраняет набор снимков одной транзакцией.
+// InsertPriceSnapshots сохраняет набор снимков одной транзакцией.
 func (r *PriceRepository) InsertPriceSnapshots(
 	ctx context.Context,
 	snapshots []PriceSnapshot,
 ) error {
+	_, err := r.InsertPriceSnapshotsWithIDs(ctx, snapshots)
+	return err
+}
+
+// InsertPriceSnapshotsWithIDs атомарно сохраняет снимки и возвращает их ID в исходном порядке.
+func (r *PriceRepository) InsertPriceSnapshotsWithIDs(
+	ctx context.Context,
+	snapshots []PriceSnapshot,
+) ([]int64, error) {
+	ids := make([]int64, 0, len(snapshots))
 	if len(snapshots) == 0 {
-		return nil
+		return ids, nil
 	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf(
-			"начать транзакцию пакетной записи цен: %w",
-			err,
-		)
+		return nil, fmt.Errorf("начать транзакцию пакетной записи цен: %w", err)
 	}
-
 	stmt, err := tx.PrepareContext(
 		ctx,
 		`INSERT INTO price_snapshots(
@@ -123,17 +130,14 @@ func (r *PriceRepository) InsertPriceSnapshots(
 	)
 	if err != nil {
 		_ = tx.Rollback()
-		return fmt.Errorf(
-			"подготовить пакетную запись цен: %w",
-			err,
-		)
+		return nil, fmt.Errorf("подготовить пакетную запись цен: %w", err)
 	}
-	defer stmt.Close()
 
 	for _, snapshot := range snapshots {
 		if err := validateSnapshot(snapshot); err != nil {
+			_ = stmt.Close()
 			_ = tx.Rollback()
-			return err
+			return nil, err
 		}
 
 		var volume any
@@ -149,7 +153,7 @@ func (r *PriceRepository) InsertPriceSnapshots(
 			exchangeTimestamp = utcText(*snapshot.ExchangeTimestamp)
 		}
 
-		if _, err := stmt.ExecContext(
+		result, err := stmt.ExecContext(
 			ctx,
 			snapshot.MarketID,
 			utcText(snapshot.Timestamp),
@@ -158,23 +162,29 @@ func (r *PriceRepository) InsertPriceSnapshots(
 			volume,
 			receivedAt,
 			exchangeTimestamp,
-		); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf(
-				"сохранить пакет снимков цен: %w",
-				err,
-			)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf(
-			"зафиксировать пакет снимков цен: %w",
-			err,
 		)
+		if err != nil {
+			_ = stmt.Close()
+			_ = tx.Rollback()
+			return nil, fmt.Errorf("сохранить пакет снимков цен: %w", err)
+		}
+		id, err := result.LastInsertId()
+		if err != nil {
+			_ = stmt.Close()
+			_ = tx.Rollback()
+			return nil, fmt.Errorf("получить id снимка цены: %w", err)
+		}
+		ids = append(ids, id)
 	}
 
-	return nil
+	if err := stmt.Close(); err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("закрыть пакетную запись цен: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("зафиксировать пакет снимков цен: %w", err)
+	}
+	return ids, nil
 }
 
 // GetLatestPrice возвращает последний снимок указанного рынка.

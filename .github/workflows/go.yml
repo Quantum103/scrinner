@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - "feat/**"
+      - "stage-*"
   pull_request:
     branches:
       - main
@@ -26,10 +27,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Проверить форматирование Go
+      - name: Проверить форматирование изменённых Go-файлов и storage-тестов Stage 10
         run: |
-          gofmt -d cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/bitget/*.go
-          unformatted="$(gofmt -l cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/bitget/*.go)"
+          gofmt -d cmd/scanner/*.go internal/arbitrage/*.go internal/exchange/bybit/tickers.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/bitget/*.go internal/price/snapshot.go internal/price/snapshot_test.go internal/scanner/*.go internal/storage/cycle.go internal/storage/cycle_test.go internal/storage/opportunities.go internal/storage/prices.go
+          unformatted="$(gofmt -l cmd/scanner/*.go internal/arbitrage/*.go internal/exchange/bybit/tickers.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/bitget/*.go internal/price/snapshot.go internal/price/snapshot_test.go internal/scanner/*.go internal/storage/cycle.go internal/storage/cycle_test.go internal/storage/opportunities.go internal/storage/prices.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
             exit 1
