@@ -183,7 +183,9 @@ func RenderText(w io.Writer, report Report, limit int, sortBy string) error {
 	fmt.Fprintf(writer, "ТОП МОНЕТ (сортировка: %s, строк: %d)\n", sortLabel(sortBy), minInt(limit, len(coins)))
 	fmt.Fprintln(writer, "Актив\tНаблюдения\tУникальные\tСредний спред\tМаксимальный спред\tЭпизоды ≥1%\tЭпизоды ≥2%\tЭпизоды ≥3%\tСредняя длительность ≥1%, сек\tМаксимальная длительность ≥1%, сек\tМаксимальная пара")
 	for i, coin := range coins {
-		if i >= limit { break }
+		if i >= limit {
+			break
+		}
 		fmt.Fprintf(writer, "%s\t%d\t%d\t%s%%\t%s%%\t%d\t%d\t%d\t%d\t%d\t%s\n",
 			coin.BaseAsset, coin.Observations, coin.UniqueOpportunities,
 			coin.AverageSpread.StringFixed(4), coin.MaxSpread.StringFixed(4),
@@ -254,16 +256,23 @@ func formatTime(value *time.Time, location *time.Location) string {
 
 func sortLabel(sortBy string) string {
 	switch sortBy {
-	case "episodes": return "episodes"
-	case "avg-spread": return "avg-spread"
-	case "max-spread": return "max-spread"
-	case "duration": return "duration ≥1%"
-	default: return "observations"
+	case "episodes":
+		return "episodes"
+	case "avg-spread":
+		return "avg-spread"
+	case "max-spread":
+		return "max-spread"
+	case "duration":
+		return "duration ≥1%"
+	default:
+		return "observations"
 	}
 }
 
 func minInt(a, b int) int {
-	if a < b { return a }
+	if a < b {
+		return a
+	}
 	return b
 }
 

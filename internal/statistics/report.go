@@ -45,12 +45,12 @@ type ThresholdMetrics struct {
 
 // GroupSummary содержит сводные метрики для общего набора, монеты или направления.
 type GroupSummary struct {
-	Observations        int64             `json:"observations"`
-	UniqueOpportunities int64             `json:"unique_opportunities"`
-	AverageSpread       decimal.Decimal   `json:"average_spread_percent"`
-	MaxSpread           decimal.Decimal   `json:"max_spread_percent"`
-	MaxSpreadAt         *time.Time        `json:"max_spread_at,omitempty"`
-	MaxSpreadPair       string            `json:"max_spread_pair,omitempty"`
+	Observations        int64              `json:"observations"`
+	UniqueOpportunities int64              `json:"unique_opportunities"`
+	AverageSpread       decimal.Decimal    `json:"average_spread_percent"`
+	MaxSpread           decimal.Decimal    `json:"max_spread_percent"`
+	MaxSpreadAt         *time.Time         `json:"max_spread_at,omitempty"`
+	MaxSpreadPair       string             `json:"max_spread_pair,omitempty"`
 	Thresholds          []ThresholdMetrics `json:"thresholds"`
 }
 
@@ -62,41 +62,41 @@ type CoinSummary struct {
 
 // RouteSummary содержит статистику одного направленного сочетания бирж и типов рынков.
 type RouteSummary struct {
-	BuyExchange     string `json:"buy_exchange"`
-	SellExchange    string `json:"sell_exchange"`
-	BuyMarketType   string `json:"buy_market_type"`
-	BuyContractType string `json:"buy_contract_type"`
-	SellMarketType  string `json:"sell_market_type"`
+	BuyExchange      string `json:"buy_exchange"`
+	SellExchange     string `json:"sell_exchange"`
+	BuyMarketType    string `json:"buy_market_type"`
+	BuyContractType  string `json:"buy_contract_type"`
+	SellMarketType   string `json:"sell_market_type"`
 	SellContractType string `json:"sell_contract_type"`
 	GroupSummary
 }
 
 // HourSummary показывает распределение наблюдений по часу в выбранной временной зоне.
 type HourSummary struct {
-	Hour             int               `json:"hour"`
-	Observations     int64             `json:"observations"`
-	AverageSpread    decimal.Decimal   `json:"average_spread_percent"`
-	MaxSpread        decimal.Decimal   `json:"max_spread_percent"`
-	Thresholds       []HourThreshold   `json:"thresholds"`
+	Hour          int             `json:"hour"`
+	Observations  int64           `json:"observations"`
+	AverageSpread decimal.Decimal `json:"average_spread_percent"`
+	MaxSpread     decimal.Decimal `json:"max_spread_percent"`
+	Thresholds    []HourThreshold `json:"thresholds"`
 }
 
 // HourThreshold содержит счётчики порога для часового интервала.
 type HourThreshold struct {
-	ThresholdPercent   string `json:"threshold_percent"`
-	Observations       int64  `json:"observations"`
-	EpisodesStarted    int64  `json:"episodes_started"`
+	ThresholdPercent string `json:"threshold_percent"`
+	Observations     int64  `json:"observations"`
+	EpisodesStarted  int64  `json:"episodes_started"`
 }
 
 // CycleSummary содержит статистику зарегистрированных после Stage 12 циклов.
 type CycleSummary struct {
-	Total           int64 `json:"total"`
-	Successful      int64 `json:"successful"`
-	Partial         int64 `json:"partial"`
-	NoData          int64 `json:"no_data"`
+	Total            int64 `json:"total"`
+	Successful       int64 `json:"successful"`
+	Partial          int64 `json:"partial"`
+	NoData           int64 `json:"no_data"`
 	CollectionFailed int64 `json:"collection_failed"`
-	SaveFailed      int64 `json:"save_failed"`
-	Cancelled       int64 `json:"cancelled"`
-	StillRunning    int64 `json:"still_running"`
+	SaveFailed       int64 `json:"save_failed"`
+	Cancelled        int64 `json:"cancelled"`
+	StillRunning     int64 `json:"still_running"`
 }
 
 // Report представляет полный исторический отчёт.
@@ -120,39 +120,39 @@ type Report struct {
 }
 
 type accumulator struct {
-	count       int64
-	sum         decimal.Decimal
-	max         decimal.Decimal
-	maxAt       *time.Time
-	maxPair     string
-	seen        map[string]struct{}
-	thresholds  [3]*thresholdAccumulator
-	identity    string
-	gap         time.Duration
-	location    *time.Location
-	onEpisode   func(int, time.Time)
+	count      int64
+	sum        decimal.Decimal
+	max        decimal.Decimal
+	maxAt      *time.Time
+	maxPair    string
+	seen       map[string]struct{}
+	thresholds [3]*thresholdAccumulator
+	identity   string
+	gap        time.Duration
+	location   *time.Location
+	onEpisode  func(int, time.Time)
 }
 
 type thresholdAccumulator struct {
-	count       int64
-	sum         decimal.Decimal
-	max         decimal.Decimal
-	first       *time.Time
-	last        *time.Time
-	seen        map[string]struct{}
-	episodes    int64
-	total       time.Duration
-	durations   []time.Duration
-	active      bool
-	start       time.Time
-	lastAbove   time.Time
-	lastSeen    time.Time
+	count     int64
+	sum       decimal.Decimal
+	max       decimal.Decimal
+	first     *time.Time
+	last      *time.Time
+	seen      map[string]struct{}
+	episodes  int64
+	total     time.Duration
+	durations []time.Duration
+	active    bool
+	start     time.Time
+	lastAbove time.Time
+	lastSeen  time.Time
 }
 
 type hourAccumulator struct {
-	count int64
-	sum   decimal.Decimal
-	max   decimal.Decimal
+	count           int64
+	sum             decimal.Decimal
+	max             decimal.Decimal
 	thresholdCounts [3]int64
 	episodesStarted [3]int64
 }
@@ -167,16 +167,16 @@ type routeKey struct {
 }
 
 type builder struct {
-	report       Report
-	location     *time.Location
-	gap          time.Duration
-	overall      *accumulator
-	coins        map[string]*accumulator
-	routes       map[routeKey]*accumulator
-	hours        [24]*hourAccumulator
-	unique       map[string]struct{}
-	coverageLost [3]bool
-	cycleMinUnknown bool
+	report                Report
+	location              *time.Location
+	gap                   time.Duration
+	overall               *accumulator
+	coins                 map[string]*accumulator
+	routes                map[routeKey]*accumulator
+	hours                 [24]*hourAccumulator
+	unique                map[string]struct{}
+	coverageLost          [3]bool
+	cycleMinUnknown       bool
 	cyclesWithHighMinimum [3]int64
 }
 
@@ -213,10 +213,10 @@ func Build(ctx context.Context, db *storage.DB, options Options) (Report, error)
 	})
 
 	b.report = Report{
-		GeneratedAt: time.Now().UTC(),
-		Timezone: options.Timezone,
+		GeneratedAt:              time.Now().UTC(),
+		Timezone:                 options.Timezone,
 		MaxObservationGapSeconds: int64(options.MaxObservationGap.Seconds()),
-		Warnings: []string{},
+		Warnings:                 []string{},
 	}
 	if !options.Since.IsZero() {
 		value := options.Since.UTC()
@@ -319,7 +319,7 @@ func Build(ctx context.Context, db *storage.DB, options Options) (Report, error)
 	}
 	sort.Strings(coinKeys)
 	for _, key := range coinKeys {
-		b.report.Coins = append(b.report.Coins, CoinSummary{BaseAsset:key, GroupSummary:b.coins[key].summary()})
+		b.report.Coins = append(b.report.Coins, CoinSummary{BaseAsset: key, GroupSummary: b.coins[key].summary()})
 	}
 	routeKeys := make([]routeKey, 0, len(b.routes))
 	for key := range b.routes {
@@ -328,10 +328,10 @@ func Build(ctx context.Context, db *storage.DB, options Options) (Report, error)
 	sort.Slice(routeKeys, func(i, j int) bool { return routeString(routeKeys[i]) < routeString(routeKeys[j]) })
 	for _, key := range routeKeys {
 		b.report.Routes = append(b.report.Routes, RouteSummary{
-			BuyExchange:key.buyExchange, SellExchange:key.sellExchange,
-			BuyMarketType:key.buyMarketType, BuyContractType:key.buyContractType,
-			SellMarketType:key.sellMarketType, SellContractType:key.sellContractType,
-			GroupSummary:b.routes[key].summary(),
+			BuyExchange: key.buyExchange, SellExchange: key.sellExchange,
+			BuyMarketType: key.buyMarketType, BuyContractType: key.buyContractType,
+			SellMarketType: key.sellMarketType, SellContractType: key.sellContractType,
+			GroupSummary: b.routes[key].summary(),
 		})
 	}
 	for hour, values := range b.hours {
@@ -342,7 +342,7 @@ func Build(ctx context.Context, db *storage.DB, options Options) (Report, error)
 		for i, threshold := range spreadThresholds {
 			hourReport.Thresholds = append(hourReport.Thresholds, HourThreshold{
 				ThresholdPercent: threshold.String(),
-				Observations: values.thresholdCounts[i],
+				Observations:    values.thresholdCounts[i],
 				EpisodesStarted: values.episodesStarted[i],
 			})
 		}
@@ -394,7 +394,7 @@ func Build(ctx context.Context, db *storage.DB, options Options) (Report, error)
 }
 
 func newAccumulator(gap time.Duration, location *time.Location, onEpisode func(int, time.Time)) *accumulator {
-	a := &accumulator{gap:gap, location:location, onEpisode:onEpisode, seen:make(map[string]struct{})}
+	a := &accumulator{gap: gap, location: location, onEpisode: onEpisode, seen: make(map[string]struct{})}
 	for i := range a.thresholds {
 		a.thresholds[i] = &thresholdAccumulator{seen:make(map[string]struct{})}
 	}
@@ -482,12 +482,12 @@ func (a *accumulator) finishAll() {
 
 func (a *accumulator) summary() GroupSummary {
 	result := GroupSummary{
-		Observations: a.count,
+		Observations:        a.count,
 		UniqueOpportunities: int64(len(a.seen)),
-		AverageSpread: average(a.sum, a.count),
-		MaxSpread: a.max,
-		MaxSpreadAt: a.maxAt,
-		MaxSpreadPair: a.maxPair,
+		AverageSpread:       average(a.sum, a.count),
+		MaxSpread:           a.max,
+		MaxSpreadAt:         a.maxAt,
+		MaxSpreadPair:       a.maxPair,
 	}
 	for i, state := range a.thresholds {
 		durationValues := make([]int64, len(state.durations))
@@ -505,16 +505,16 @@ func (a *accumulator) summary() GroupSummary {
 			}
 		}
 		metric := ThresholdMetrics{
-			ThresholdPercent: spreadThresholds[i].String(),
-			Observations: state.count,
-			UniqueOpportunities: int64(len(state.seen)),
-			Episodes: state.episodes,
-			AverageSpreadPercent: average(state.sum, state.count),
-			MaxSpreadPercent: state.max,
+			ThresholdPercent:             spreadThresholds[i].String(),
+			Observations:                 state.count,
+			UniqueOpportunities:          int64(len(state.seen)),
+			Episodes:                     state.episodes,
+			AverageSpreadPercent:         average(state.sum, state.count),
+			MaxSpreadPercent:             state.max,
 			TotalObservedDurationSeconds: int64(state.total / time.Second),
-			MaxEpisodeDurationSeconds: maxDurationSeconds(state.durations),
+			MaxEpisodeDurationSeconds:    maxDurationSeconds(state.durations),
 			MedianEpisodeDurationSeconds: median,
-			CoverageComplete: true,
+			CoverageComplete:             true,
 		}
 		if state.episodes > 0 {
 			metric.AverageEpisodeDurationSeconds = int64((state.total / time.Duration(state.episodes)) / time.Second)

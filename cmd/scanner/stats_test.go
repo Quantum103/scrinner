@@ -42,7 +42,7 @@ stats:
 	}
 	var report struct {
 		Observations int64 `json:"observations"`
-		Cycles struct {
+		Cycles       struct {
 			Total int64 `json:"total"`
 		} `json:"cycles"`
 	}

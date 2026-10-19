@@ -33,25 +33,25 @@ type ScanCycle struct {
 
 // HistoricalObservation содержит проверенную строку истории возможности.
 type HistoricalObservation struct {
-	ID                int64
-	CycleID           string
-	Timestamp         time.Time
-	Symbol            string
-	BaseAsset         string
-	QuoteAsset        string
-	BuyMarketID       int64
-	BuyExchange       string
-	BuySymbol         string
-	BuyMarketType     string
-	BuyContractType   string
-	BuyPrice          decimal.Decimal
-	SellMarketID      int64
-	SellExchange      string
-	SellSymbol        string
-	SellMarketType    string
-	SellContractType  string
-	SellPrice         decimal.Decimal
-	SpreadPercent     decimal.Decimal
+	ID               int64
+	CycleID          string
+	Timestamp        time.Time
+	Symbol           string
+	BaseAsset        string
+	QuoteAsset       string
+	BuyMarketID      int64
+	BuyExchange      string
+	BuySymbol        string
+	BuyMarketType    string
+	BuyContractType  string
+	BuyPrice         decimal.Decimal
+	SellMarketID     int64
+	SellExchange     string
+	SellSymbol       string
+	SellMarketType   string
+	SellContractType string
+	SellPrice        decimal.Decimal
+	SpreadPercent    decimal.Decimal
 }
 
 // StartScanCycle сохраняет запись о начале цикла до сбора рыночных данных.

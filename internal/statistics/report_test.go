@@ -57,9 +57,13 @@ func addObservation(t *testing.T, db *storage.DB, cycleID string, at time.Time, 
 		MarketType: sellMarketType, ContractType: sellContract, Active: true,
 	}
 	buyID, err := storage.NewMarketRepository(db).UpsertMarket(ctx, buy)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	sellID, err := storage.NewMarketRepository(db).UpsertMarket(ctx, sell)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	minimum := decimal.RequireFromString("0.5")
 	if err := db.StartScanCycle(ctx, storage.ScanCycle{
@@ -91,18 +95,23 @@ func addObservation(t *testing.T, db *storage.DB, cycleID string, at time.Time, 
 func TestBuildThresholdCountsEpisodesAndPeriodBoundary(t *testing.T) {
 	db := openStatisticsDB(t)
 	start := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
-	values := []struct{ offset time.Duration; spread string }{
-		{0, "1"}, {30*time.Second, "1.8"}, {60*time.Second, "2"},
-		{90*time.Second, "0.7"}, {120*time.Second, "0.99"}, {150*time.Second, "3"},
+	values := []struct {
+		offset time.Duration
+		spread string
+	}{
+		{0, "1"}, {30 * time.Second, "1.8"}, {60 * time.Second, "2"},
+		{90 * time.Second, "0.7"}, {120 * time.Second, "0.99"}, {150 * time.Second, "3"},
 	}
 	for i, value := range values {
 		addObservation(t, db, fmt.Sprintf("cycle-%d", i), start.Add(value.offset), "BTC", "spot", "spot", value.spread)
 	}
 
 	report, err := Build(context.Background(), db, Options{
-		Since: start, Until: start.Add(3*time.Minute), Timezone:"UTC", MaxObservationGap:60*time.Second,
+		Since: start, Until: start.Add(3 * time.Minute), Timezone: "UTC", MaxObservationGap:60 * time.Second,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if report.Observations != 6 || report.UniqueOpportunities != 1 {
 		t.Fatalf("наблюдения/уникальные возможности = %d/%d, ожидалось 6/1", report.Observations, report.UniqueOpportunities)
 	}
@@ -112,7 +121,7 @@ func TestBuildThresholdCountsEpisodesAndPeriodBoundary(t *testing.T) {
 	if got := report.Overall.MaxSpread.String(); got != "3" {
 		t.Fatalf("максимальный спред = %s, ожидалось 3", got)
 	}
-	if report.Overall.MaxSpreadAt == nil || !report.Overall.MaxSpreadAt.Equal(start.Add(150*time.Second)) {
+	if report.Overall.MaxSpreadAt == nil || !report.Overall.MaxSpreadAt.Equal(start.Add(150 * time.Second)) {
 		t.Fatalf("неверное время максимального спреда: %#v", report.Overall.MaxSpreadAt)
 	}
 	thresholds := report.Overall.Thresholds
@@ -136,9 +145,11 @@ func TestBuildThresholdCountsEpisodesAndPeriodBoundary(t *testing.T) {
 	}
 
 	bounded, err := Build(context.Background(), db, Options{
-		Since: start, Until: start.Add(150*time.Second), Timezone:"UTC", MaxObservationGap:60*time.Second,
+		Since: start, Until: start.Add(150 * time.Second), Timezone: "UTC", MaxObservationGap:60 * time.Second,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if bounded.Observations != 5 {
 		t.Fatalf("конец периода должен быть исключён: наблюдений %d, ожидалось 5", bounded.Observations)
 	}
@@ -156,9 +167,11 @@ func TestBuildSeparatesAllFourMarketTypeCombinations(t *testing.T) {
 			combo.base, combo.buy, combo.sell, "1")
 	}
 	report, err := Build(context.Background(), db, Options{
-		Since: start, Until: start.Add(time.Hour), Timezone:"UTC", MaxObservationGap:60*time.Second,
+		Since: start, Until: start.Add(time.Hour), Timezone: "UTC", MaxObservationGap:60 * time.Second,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(report.Routes) != 4 {
 		t.Fatalf("ожидалось 4 независимых сочетания рынков, получено %d: %#v", len(report.Routes), report.Routes)
 	}
@@ -171,29 +184,47 @@ func TestEmptyPeriodAndRenderFormats(t *testing.T) {
 	db := openStatisticsDB(t)
 	start := time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC)
 	report, err := Build(context.Background(), db, Options{
-		Since: start, Until: start.Add(24*time.Hour), Timezone:"UTC", MaxObservationGap:time.Minute,
+		Since: start, Until: start.Add(24 * time.Hour), Timezone: "UTC", MaxObservationGap:time.Minute,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if report.Observations != 0 || len(report.Coins) != 0 || len(report.Routes) != 0 || len(report.Hours) != 24 {
 		t.Fatalf("неверный пустой отчёт: %#v", report)
 	}
 
 	var textOut bytes.Buffer
-	if err := RenderText(&textOut, report, 20, "observations"); err != nil { t.Fatal(err) }
-	if textOut.Len() == 0 { t.Fatal("текстовый отчёт пуст") }
+	if err := RenderText(&textOut, report, 20, "observations"); err != nil {
+		t.Fatal(err)
+	}
+	if textOut.Len() == 0 {
+		t.Fatal("текстовый отчёт пуст")
+	}
 	var jsonOut bytes.Buffer
-	if err := RenderJSON(&jsonOut, report); err != nil { t.Fatal(err) }
+	if err := RenderJSON(&jsonOut, report); err != nil {
+		t.Fatal(err)
+	}
 	var decoded Report
-	if err := json.Unmarshal(jsonOut.Bytes(), &decoded); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(jsonOut.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
 	var csvOut bytes.Buffer
-	if err := RenderCSV(&csvOut, report); err != nil { t.Fatal(err) }
+	if err := RenderCSV(&csvOut, report); err != nil {
+		t.Fatal(err)
+	}
 	reader := csv.NewReader(&csvOut)
 	reader.FieldsPerRecord = -1
 	for {
 		record, err := reader.Read()
-		if err == io.EOF { break }
-		if err != nil { t.Fatal(err) }
-		if len(record) != 21 { t.Fatalf("CSV имеет неверное число столбцов (%d): %#v", len(record), record) }
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(record) != 21 {
+			t.Fatalf("CSV имеет неверное число столбцов (%d): %#v", len(record), record)
+		}
 	}
 }
 
@@ -204,11 +235,15 @@ func TestTimezoneChangesHourAggregation(t *testing.T) {
 	reportUTC, err := Build(context.Background(), db, Options{
 		Since: at, Until: at.Add(time.Hour), Timezone: "UTC", MaxObservationGap: time.Minute,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	reportLocal, err := Build(context.Background(), db, Options{
 		Since: at, Until: at.Add(time.Hour), Timezone: "Europe/Amsterdam", MaxObservationGap: time.Minute,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if reportUTC.Hours[23].Observations != 1 || reportLocal.Hours[1].Observations != 1 {
 		t.Fatalf("часовая группировка в разных зонах неверна: UTC[23]=%d Amsterdam[1]=%d",
 			reportUTC.Hours[23].Observations, reportLocal.Hours[1].Observations)
@@ -220,11 +255,15 @@ func TestStreamAndReportPreserveLegacyObservationWithoutCycle(t *testing.T) {
 	start := time.Date(2026, 10, 4, 0, 0, 0, 0, time.UTC)
 	addObservation(t, db, "known-cycle", start, "BTC", "spot", "spot", "1")
 	_, err := db.SQLDB().ExecContext(context.Background(), "UPDATE opportunities SET cycle_id = NULL")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	report, err := Build(context.Background(), db, Options{
-		Since: start, Until: start.Add(time.Hour), Timezone:"UTC", MaxObservationGap:time.Minute,
+		Since: start, Until: start.Add(time.Hour), Timezone: "UTC", MaxObservationGap:time.Minute,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if report.LegacyObservations != 1 {
 		t.Fatalf("старое наблюдение должно остаться без цикла, значение=%d", report.LegacyObservations)
 	}
@@ -234,7 +273,7 @@ func TestStreamAndReportPreserveLegacyObservationWithoutCycle(t *testing.T) {
 }
 
 func TestObservationIdentityIncludesDirectionAndRawSymbols(t *testing.T) {
-	a := storage.HistoricalObservation{BaseAsset:"BTC", QuoteAsset:"USDT", BuyExchange:"binance", BuySymbol:"BTCUSDT", BuyMarketType:"spot", BuyContractType:"spot", SellExchange:"bybit", SellSymbol:"BTC_USDT", SellMarketType:"futures", SellContractType:"perpetual"}
+	a := storage.HistoricalObservation{BaseAsset: "BTC", QuoteAsset: "USDT", BuyExchange: "binance", BuySymbol: "BTCUSDT", BuyMarketType: "spot", BuyContractType: "spot", SellExchange: "bybit", SellSymbol: "BTC_USDT", SellMarketType: "futures", SellContractType: "perpetual"}
 	b := a
 	b.BuyExchange, b.SellExchange = b.SellExchange, b.BuyExchange
 	b.BuySymbol, b.SellSymbol = b.SellSymbol, b.BuySymbol
@@ -245,17 +284,18 @@ func TestObservationIdentityIncludesDirectionAndRawSymbols(t *testing.T) {
 	}
 }
 
-
 // TestMaxObservationGapSeparatesEpisodes проверяет разрыв длиннее допустимого интервала.
 func TestMaxObservationGapSeparatesEpisodes(t *testing.T) {
 	db := openStatisticsDB(t)
 	start := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	addObservation(t, db, "gap-a", start, "BTC", "spot", "spot", "1")
-	addObservation(t, db, "gap-b", start.Add(90*time.Second), "BTC", "spot", "spot", "1.5")
+	addObservation(t, db, "gap-b", start.Add(90 * time.Second), "BTC", "spot", "spot", "1.5")
 	report, err := Build(context.Background(), db, Options{
-		Since: start, Until: start.Add(2*time.Minute), Timezone: "UTC", MaxObservationGap: 60*time.Second,
+		Since: start, Until: start.Add(2 * time.Minute), Timezone: "UTC", MaxObservationGap: 60 * time.Second,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	metric := report.Overall.Thresholds[0]
 	if metric.Observations != 2 || metric.Episodes != 2 || metric.TotalObservedDurationSeconds != 0 {
 		t.Fatalf("разрыв больше max_observation_gap должен разделять эпизоды: %#v", metric)

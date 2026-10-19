@@ -16,31 +16,45 @@ func TestHistoricalStatisticsMigrationPreservesLegacyRows(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	oldMigrations := filepath.Join(root, "old-migrations")
-	if err := os.MkdirAll(oldMigrations, 0755); err != nil { t.Fatal(err) }
+	if err := os.MkdirAll(oldMigrations, 0755); err != nil {
+		t.Fatal(err)
+	}
 	for _, name := range []string{
 		"001_initial.sql", "002_price_snapshot_timestamps.sql", "003_opportunity_snapshot_refs.sql",
 	} {
 		content, err := os.ReadFile(filepath.Join("../../migrations", name))
-		if err != nil { t.Fatal(err) }
-		if err := os.WriteFile(filepath.Join(oldMigrations, name), content, 0600); err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(oldMigrations, name), content, 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	db, err := Open(ctx, filepath.Join(root, "legacy.db"))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
-	if err := db.Migrate(ctx, oldMigrations); err != nil { t.Fatal(err) }
+	if err := db.Migrate(ctx, oldMigrations); err != nil {
+		t.Fatal(err)
+	}
 
 	buy := market.Market{
-		Exchange:"binance", Symbol:"BTCUSDT", BaseAsset:"BTC", QuoteAsset:"USDT",
-		MarketType:market.MarketTypeSpot, ContractType:market.ContractTypeSpot, Active:true,
+		Exchange: "binance", Symbol: "BTCUSDT", BaseAsset: "BTC", QuoteAsset: "USDT",
+		MarketType: market.MarketTypeSpot, ContractType: market.ContractTypeSpot, Active: true,
 	}
 	sell := market.Market{
-		Exchange:"bybit", Symbol:"BTC_USDT", BaseAsset:"BTC", QuoteAsset:"USDT",
-		MarketType:market.MarketTypeFutures, ContractType:market.ContractTypePerpetual, Active:true,
+		Exchange: "bybit", Symbol: "BTC_USDT", BaseAsset: "BTC", QuoteAsset: "USDT",
+		MarketType: market.MarketTypeFutures, ContractType: market.ContractTypePerpetual, Active: true,
 	}
 	buyID, err := NewMarketRepository(db).UpsertMarket(ctx, buy)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	sellID, err := NewMarketRepository(db).UpsertMarket(ctx, sell)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	at := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
 	_, err = db.SQLDB().ExecContext(ctx, `INSERT INTO opportunities(
 		timestamp, symbol, base_asset, quote_asset,
@@ -52,17 +66,31 @@ func TestHistoricalStatisticsMigrationPreservesLegacyRows(t *testing.T) {
 		buyID, buy.Exchange, buy.MarketType, buy.ContractType, "100",
 		sellID, sell.Exchange, sell.MarketType, sell.ContractType, "101", "1",
 		buy.Symbol, sell.Symbol)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	if err := db.Migrate(ctx, "../../migrations"); err != nil { t.Fatal(err) }
+	if err := db.Migrate(ctx, "../../migrations"); err != nil {
+		t.Fatal(err)
+	}
 	var count int
-	if err := db.SQLDB().QueryRowContext(ctx, "SELECT COUNT(*) FROM opportunities").Scan(&count); err != nil { t.Fatal(err) }
-	if count != 1 { t.Fatalf("историческая строка потеряна после миграции: count=%d", count) }
+	if err := db.SQLDB().QueryRowContext(ctx, "SELECT COUNT(*) FROM opportunities").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("историческая строка потеряна после миграции: count=%d", count)
+	}
 	var cycleID sql.NullString
-	if err := db.SQLDB().QueryRowContext(ctx, "SELECT cycle_id FROM opportunities LIMIT 1").Scan(&cycleID); err != nil { t.Fatal(err) }
-	if cycleID.Valid { t.Fatalf("нельзя выдумывать cycle_id для старой строки: %#v", cycleID) }
+	if err := db.SQLDB().QueryRowContext(ctx, "SELECT cycle_id FROM opportunities LIMIT 1").Scan(&cycleID); err != nil {
+		t.Fatal(err)
+	}
+	if cycleID.Valid {
+		t.Fatalf("нельзя выдумывать cycle_id для старой строки: %#v", cycleID)
+	}
 	var spread string
-	if err := db.SQLDB().QueryRowContext(ctx, "SELECT spread_percent FROM opportunities LIMIT 1").Scan(&spread); err != nil { t.Fatal(err) }
+	if err := db.SQLDB().QueryRowContext(ctx, "SELECT spread_percent FROM opportunities LIMIT 1").Scan(&spread); err != nil {
+		t.Fatal(err)
+	}
 	if !decimal.RequireFromString(spread).Equal(decimal.NewFromInt(1)) {
 		t.Fatalf("спред изменился после миграции: %s", spread)
 	}
