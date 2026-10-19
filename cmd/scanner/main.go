@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/example/crypto-arbitrage-scanner/internal/config"
+	"github.com/example/crypto-arbitrage-scanner/internal/exchange"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/binance"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/bitget"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/bybit"
@@ -19,6 +21,8 @@ import (
 	"github.com/example/crypto-arbitrage-scanner/internal/market"
 	"github.com/example/crypto-arbitrage-scanner/internal/price"
 	"github.com/example/crypto-arbitrage-scanner/internal/storage"
+	scanengine "github.com/example/crypto-arbitrage-scanner/internal/scanner"
+	"github.com/shopspring/decimal"
 )
 
 const defaultConfigPath = "configs/config.yaml"
@@ -53,68 +57,30 @@ func main() {
 	logger.Info("configuration loaded", "scan_interval", cfg.Scanner.Interval, "min_spread_percent", cfg.Scanner.MinSpreadPercent, "max_data_age", cfg.Scanner.MaxDataAge, "database", cfg.Database.Path)
 	logger.Info("SQLite storage initialized successfully")
 
-	enabledAdapters := 0
-	passFailed := false
-
-	if cfg.Exchanges.Bybit.Enabled {
-		enabledAdapters++
-		if err := runBybitPass(ctx, logger, db); err != nil {
-			logger.Error("Bybit pass failed", "error", err)
-			passFailed = true
-		}
-	} else {
-		logger.Info("Bybit adapter disabled by configuration")
+	adapters := configuredAdapters(cfg.Exchanges, logger)
+	if len(adapters) == 0 {
+		logger.Warn("все адаптеры бирж отключены; сканирование не запускается")
+		return
 	}
 
-	if cfg.Exchanges.Binance.Enabled {
-		enabledAdapters++
-		if err := runBinancePass(ctx, logger, db); err != nil {
-			logger.Error("Binance pass failed", "error", err)
-			passFailed = true
-		}
-	} else {
-		logger.Info("Binance adapter disabled by configuration")
-	}
-
-	if cfg.Exchanges.MEXC.Enabled {
-		enabledAdapters++
-	}
-	if err := runMEXCPassIfEnabled(ctx, cfg.Exchanges.MEXC.Enabled, logger, db); err != nil {
-		logger.Error("MEXC pass failed", "error", err)
-		passFailed = true
-	}
-
-	if cfg.Exchanges.OKX.Enabled {
-		enabledAdapters++
-	}
-	if err := runOKXPassIfEnabled(ctx, cfg.Exchanges.OKX.Enabled, cfg.Exchanges.OKX.BaseURL, logger, db); err != nil {
-		logger.Error("OKX pass failed", "error", err)
-		passFailed = true
-	}
-
-	if cfg.Exchanges.Gate.Enabled {
-		enabledAdapters++
-	}
-	if err := runGatePassIfEnabled(ctx, cfg.Exchanges.Gate.Enabled, cfg.Exchanges.Gate.BaseURL, logger, db); err != nil {
-		logger.Error("Gate pass failed", "error", err)
-		passFailed = true
-	}
-
-	if cfg.Exchanges.Bitget.Enabled {
-		enabledAdapters++
-	}
-	if err := runBitgetPassIfEnabled(ctx, cfg.Exchanges.Bitget.Enabled, logger, db); err != nil {
-		logger.Error("Bitget pass failed", "error", err)
-		passFailed = true
-	}
-
-	if enabledAdapters == 0 {
-		logger.Info("all exchange adapters disabled by configuration")
-	}
-	if passFailed {
+	runner, err := scanengine.NewRunner(adapters, db, scanengine.Config{
+		MinSpreadPercent:       decimal.NewFromFloat(cfg.Scanner.MinSpreadPercent),
+		MaxDataAge:             cfg.Scanner.MaxDataAge,
+		MaxConcurrentExchanges: 6,
+	}, logger)
+	if err != nil {
+		logger.Error("не удалось подготовить scanner", "error", err)
 		os.Exit(1)
 	}
-}
+
+	logger.Info("scanner started", "exchanges_enabled", len(adapters),
+		"scan_interval", cfg.Scanner.Interval, "min_spread_percent", cfg.Scanner.MinSpreadPercent,
+		"max_data_age", cfg.Scanner.MaxDataAge)
+	if err := runner.Run(ctx, cfg.Scanner.Interval); err != nil && !errors.Is(err, context.Canceled) {
+		logger.Error("scanner stopped with an error", "error", err)
+		os.Exit(1)
+	}
+
 
 // runBybitPass выполняет один исследовательский проход без scheduler и detector.
 func runBybitPass(ctx context.Context, logger *slog.Logger, db *storage.DB) error {
@@ -649,3 +615,61 @@ func runBitgetPassIfEnabled(ctx context.Context, enabled bool, logger *slog.Logg
 	}
 	return runBitgetPass(ctx, logger, db)
 }
+
+type unavailableExchange struct {
+	name string
+	err  error
+}
+
+func (e unavailableExchange) Name() string { return e.name }
+
+func (e unavailableExchange) DiscoverMarkets(context.Context) ([]market.Market, error) {
+	return nil, e.err
+}
+
+func (e unavailableExchange) CollectTickers(context.Context, []market.Market) ([]price.Ticker, error) {
+	return nil, e.err
+}
+
+// configuredAdapters создаёт адаптеры по YAML и сохраняет ошибки создания как отказ отдельной биржи.
+func configuredAdapters(cfg config.ExchangesConfig, logger *slog.Logger) []exchange.Exchange {
+	adapters := make([]exchange.Exchange, 0, 6)
+	if cfg.Bybit.Enabled {
+		adapters = append(adapters, bybit.NewDefault(logger))
+	}
+	if cfg.Binance.Enabled {
+		adapters = append(adapters, binance.NewDefault(logger))
+	}
+	if cfg.MEXC.Enabled {
+		adapters = append(adapters, mexc.NewDefault(logger))
+	}
+	if cfg.OKX.Enabled {
+		clientConfig := okx.DefaultClientConfig()
+		if strings.TrimSpace(cfg.OKX.BaseURL) != "" {
+			clientConfig.BaseURL = strings.TrimSpace(cfg.OKX.BaseURL)
+		}
+		client, err := okx.NewClient(clientConfig)
+		if err != nil {
+			adapters = append(adapters, unavailableExchange{name: string(exchange.ExchangeOKX), err: fmt.Errorf("создать HTTP-клиент OKX: %w", err)})
+		} else {
+			adapters = append(adapters, okx.New(client, logger))
+		}
+	}
+	if cfg.Gate.Enabled {
+		clientConfig := gate.DefaultClientConfig()
+		if strings.TrimSpace(cfg.Gate.BaseURL) != "" {
+			clientConfig.BaseURL = strings.TrimSpace(cfg.Gate.BaseURL)
+		}
+		client, err := gate.NewClient(clientConfig)
+		if err != nil {
+			adapters = append(adapters, unavailableExchange{name: string(exchange.ExchangeGate), err: fmt.Errorf("создать HTTP-клиент Gate: %w", err)})
+		} else {
+			adapters = append(adapters, gate.New(client, logger))
+		}
+	}
+	if cfg.Bitget.Enabled {
+		adapters = append(adapters, bitget.NewDefault(logger))
+	}
+	return adapters
+}
+
