@@ -19,9 +19,9 @@ import (
 )
 
 type fakeExchange struct {
-	name       string
-	markets    []market.Market
-	tickers    []price.Ticker
+	name        string
+	markets     []market.Market
+	tickers     []price.Ticker
 	discoverErr error
 	tickerErr   error
 	barrier     *sync.WaitGroup
