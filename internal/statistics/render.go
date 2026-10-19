@@ -50,7 +50,7 @@ func RenderCSV(w io.Writer, report Report) error {
 		report.Overall.AverageSpread.String(), report.Overall.MaxSpread.String(),
 		formatTime(report.Overall.MaxSpreadAt, location),
 		"", "", "", "", "", "", "",
-	}...)); err != nil {
+	}...))); err != nil {
 		return err
 	}
 	for _, metric := range report.Overall.Thresholds {
@@ -71,7 +71,7 @@ func RenderCSV(w io.Writer, report Report) error {
 			strconv.FormatInt(metric.MedianEpisodeDurationSeconds, 10),
 			strconv.FormatInt(metric.MaxEpisodeDurationSeconds, 10),
 			strconv.FormatBool(metric.CoverageComplete),
-		}...)); err != nil {
+		}...))); err != nil {
 			return err
 		}
 	}

@@ -249,7 +249,7 @@ func Build(ctx context.Context, db *storage.DB, options Options) (Report, error)
 			b.cycleMinUnknown = true
 		}
 		for i, threshold := range spreadThresholds {
-			if cycle.MinSpreadKnown && cycle.MinSpreadPercent.GreaterThanOrEqual(threshold) {
+			if cycle.MinSpreadKnown && cycle.MinSpreadPercent.GreaterThan(threshold) {
 				b.cyclesWithHighMinimum[i]++
 			}
 		}
