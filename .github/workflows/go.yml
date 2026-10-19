@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - "feat/**"
+      - "stage-*"
   pull_request:
     branches:
       - main
@@ -28,8 +29,8 @@ jobs:
 
       - name: Проверить форматирование Go
         run: |
-          gofmt -d cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/bitget/*.go
-          unformatted="$(gofmt -l cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/bitget/*.go)"
+          gofmt -d cmd/scanner/*.go internal/arbitrage/*.go internal/config/*.go internal/exchange/*.go internal/exchange/bybit/*.go internal/exchange/binance/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/bitget/*.go internal/market/*.go internal/price/*.go internal/scanner/*.go internal/storage/*.go
+          unformatted="$(gofmt -l cmd/scanner/*.go internal/arbitrage/*.go internal/config/*.go internal/exchange/*.go internal/exchange/bybit/*.go internal/exchange/binance/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/bitget/*.go internal/market/*.go internal/price/*.go internal/scanner/*.go internal/storage/*.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
             exit 1
