@@ -11,6 +11,7 @@ import (
 
 	"github.com/example/crypto-arbitrage-scanner/internal/config"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/binance"
+	"github.com/example/crypto-arbitrage-scanner/internal/exchange/bitget"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/bybit"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/gate"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/mexc"
@@ -96,6 +97,14 @@ func main() {
 	}
 	if err := runGatePassIfEnabled(ctx, cfg.Exchanges.Gate.Enabled, cfg.Exchanges.Gate.BaseURL, logger, db); err != nil {
 		logger.Error("Gate pass failed", "error", err)
+		passFailed = true
+	}
+
+	if cfg.Exchanges.Bitget.Enabled {
+		enabledAdapters++
+	}
+	if err := runBitgetPassIfEnabled(ctx, cfg.Exchanges.Bitget.Enabled, logger, db); err != nil {
+		logger.Error("Bitget pass failed", "error", err)
 		passFailed = true
 	}
 
@@ -558,4 +567,85 @@ func runGatePassIfEnabled(ctx context.Context, enabled bool, baseURL string, log
 		return nil
 	}
 	return runGatePass(ctx, logger, db, baseURL)
+}
+
+// runBitgetPass выполняет один исследовательский проход Bitget через публичный REST API.
+func runBitgetPass(ctx context.Context, logger *slog.Logger, db *storage.DB) error {
+	return runBitgetPassWithAdapter(ctx, logger, db, bitget.NewDefault(logger))
+}
+
+// runBitgetPassWithAdapter сохраняет рынки и котировки Bitget через существующие SQLite-репозитории.
+func runBitgetPassWithAdapter(ctx context.Context, logger *slog.Logger, db *storage.DB, adapter *bitget.Adapter) error {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if adapter == nil {
+		return fmt.Errorf("Bitget adapter не задан")
+	}
+
+	markets, err := adapter.DiscoverMarkets(ctx)
+	if err != nil {
+		return err
+	}
+	spotCount, perpetualCount := 0, 0
+	marketIDs := make(map[string]int64, len(markets))
+	marketRepo := storage.NewMarketRepository(db)
+	for _, m := range markets {
+		switch {
+		case m.IsSpot():
+			spotCount++
+		case m.IsPerpetual():
+			perpetualCount++
+		default:
+			continue
+		}
+		id, err := marketRepo.UpsertMarket(ctx, m)
+		if err != nil {
+			return fmt.Errorf("сохранить Bitget рынок %s: %w", m.Symbol, err)
+		}
+		marketIDs[marketStorageKey(m)] = id
+	}
+
+	tickers, stats, err := adapter.CollectTickersWithStats(ctx, markets)
+	if err != nil {
+		return err
+	}
+	snapshots := make([]storage.PriceSnapshot, 0, len(tickers))
+	for _, ticker := range tickers {
+		if !ticker.IsValid() {
+			continue
+		}
+		marketID, ok := marketIDs[tickerStorageKey(ticker)]
+		if !ok {
+			logger.Warn("Bitget ticker не сопоставлен с сохранённым рынком",
+				"symbol", ticker.Symbol, "market_type", ticker.MarketType, "contract_type", ticker.ContractType)
+			continue
+		}
+		snapshots = append(snapshots, storage.PriceSnapshot{
+			MarketID: marketID, Timestamp: ticker.Timestamp, ReceivedAt: ticker.ReceivedAt,
+			ExchangeTimestamp: ticker.ExchangeTimestamp, Bid: ticker.Bid, Ask: ticker.Ask,
+			Volume24h: ticker.Volume24h,
+		})
+	}
+	if err := storage.NewPriceRepository(db).InsertPriceSnapshots(ctx, snapshots); err != nil {
+		return fmt.Errorf("сохранить Bitget price snapshots: %w", err)
+	}
+	logger.Info("Bitget pass completed",
+		"spot_usdt", spotCount, "usdt_perpetual", perpetualCount,
+		"tickers_received", stats.Received, "tickers_valid", stats.Valid,
+		"tickers_skipped", stats.Skipped, "markets_stored", len(marketIDs),
+		"snapshots_stored", len(snapshots))
+	return nil
+}
+
+// runBitgetPassIfEnabled не создаёт клиент и не обращается к сети, когда Bitget выключен.
+func runBitgetPassIfEnabled(ctx context.Context, enabled bool, logger *slog.Logger, db *storage.DB) error {
+	if !enabled {
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Info("Bitget adapter disabled by configuration")
+		return nil
+	}
+	return runBitgetPass(ctx, logger, db)
 }
