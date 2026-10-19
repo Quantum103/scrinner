@@ -32,7 +32,7 @@ type ExchangesConfig struct {
 	Binance ExchangeConfig `yaml:"binance"`
 	Bybit   ExchangeConfig `yaml:"bybit"`
 	MEXC    ExchangeConfig `yaml:"mexc"`
-	OKX     OKXConfig       `yaml:"okx"`
+	OKX     OKXConfig      `yaml:"okx"`
 	Gate    GateConfig     `yaml:"gate"`
 	Bitget  ExchangeConfig `yaml:"bitget"`
 }

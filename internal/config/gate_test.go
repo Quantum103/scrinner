@@ -56,7 +56,6 @@ database:
 	}
 }
 
-
 // TestLoadRejectsSubsecondScanInterval предотвращает непредусмотренно частые запросы к биржам.
 func TestLoadRejectsSubsecondScanInterval(t *testing.T) {
 	t.Parallel()
@@ -76,7 +75,6 @@ database:
 		t.Fatal("ожидалась ошибка для интервала короче одной секунды")
 	}
 }
-
 
 // TestLoadStatsDefaults проверяет значения статистики по умолчанию.
 func TestLoadStatsDefaults(t *testing.T) {
