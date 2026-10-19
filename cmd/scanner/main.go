@@ -672,4 +672,3 @@ func configuredAdapters(cfg config.ExchangesConfig, logger *slog.Logger) []excha
 	}
 	return adapters
 }
-
