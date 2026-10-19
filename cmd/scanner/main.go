@@ -569,7 +569,6 @@ func runGatePassIfEnabled(ctx context.Context, enabled bool, baseURL string, log
 	return runGatePass(ctx, logger, db, baseURL)
 }
 
-
 // runBitgetPass выполняет один исследовательский проход Bitget через публичный REST API.
 func runBitgetPass(ctx context.Context, logger *slog.Logger, db *storage.DB) error {
 	return runBitgetPassWithAdapter(ctx, logger, db, bitget.NewDefault(logger))
