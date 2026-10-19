@@ -209,7 +209,10 @@ func (f *delayedExchange) CollectTickers(ctx context.Context, markets []market.M
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	return f.fakeExchange.CollectTickers(ctx, markets)
+	if f.tickerErr != nil {
+		return nil, f.tickerErr
+	}
+	return append([]price.Ticker(nil), f.tickers...), nil
 }
 
 func openTestDB(t *testing.T) *storage.DB {
