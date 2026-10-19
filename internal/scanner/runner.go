@@ -33,29 +33,67 @@ type Config struct {
 
 // ExchangeStatus описывает результат опроса одной биржи в текущем цикле.
 type ExchangeStatus struct {
-	Name            string
-	Markets         int
-	TickersReceived int
-	SnapshotsSaved  int
-	Error           string
+	Name                 string
+	Markets              int
+	MetadataRefreshed    bool
+	TickersReceived      int
+	TickersAccepted      int
+	TickersRejected      int
+	SnapshotsSaved       int
+	FailureStage         string
+	Error                string
 }
 
 // CycleResult описывает частичный или полный результат цикла.
 type CycleResult struct {
-	StartedAt             time.Time
-	FinishedAt            time.Time
-	Exchanges             []ExchangeStatus
-	OpportunitiesDetected int
+	ID                       string
+	Status                   string
+	StartedAt                time.Time
+	FinishedAt               time.Time
+	ExchangesEnabled         int
+	ExchangesSucceeded       int
+	ExchangesFailed          int
+	MarketsDiscovered        int
+	MetadataRefreshes        int
+	TickersReceived          int
+	TickersAccepted          int
+	TickersRejected          int
+	SnapshotsSaved           int
+	OpportunitiesDetected    int
+	OpportunitiesSaved       int
+	PersistenceErrors        int
+	Error                    string
+	Exchanges                []ExchangeStatus
+}
+
+const (
+	CycleStatusRunning           = "running"
+	CycleStatusSuccess           = "success"
+	CycleStatusPartial           = "partial"
+	CycleStatusNoData            = "no_data"
+	CycleStatusCollectionFailed  = "collection_failed"
+	CycleStatusSaveFailed        = "save_failed"
+	CycleStatusCancelled         = "cancelled"
+)
+
+const defaultMarketRefreshInterval = 15 * time.Minute
+
+type marketCacheEntry struct {
+	markets     []market.Market
+	refreshedAt time.Time
 }
 
 // Runner выполняет один непрерывный процесс сбора и сопоставления данных.
 type Runner struct {
-	adapters []exchange.Exchange
-	db       *storage.DB
-	logger   *slog.Logger
-	config   Config
-	detector *arbitrage.Detector
-	running  atomic.Bool
+	adapters              []exchange.Exchange
+	db                    *storage.DB
+	logger                *slog.Logger
+	config                Config
+	detector              *arbitrage.Detector
+	running               atomic.Bool
+	marketCacheMu         sync.Mutex
+	marketCache           map[string]marketCacheEntry
+	marketRefreshInterval time.Duration
 }
 
 // NewRunner проверяет настройки и сохраняет включённые адаптеры.
@@ -89,55 +127,126 @@ func NewRunner(
 	}
 	copiedAdapters := append([]exchange.Exchange(nil), adapters...)
 	return &Runner{
-		adapters: copiedAdapters,
-		db:       db,
-		logger:   logger,
-		config:   cfg,
-		detector: detector,
+		adapters:              copiedAdapters,
+		db:                    db,
+		logger:                logger,
+		config:                cfg,
+		detector:              detector,
+		marketCache:           make(map[string]marketCacheEntry),
+		marketRefreshInterval: defaultMarketRefreshInterval,
 	}, nil
 }
 
 type exchangeBatch struct {
-	name    string
-	markets []market.Market
-	tickers []price.Ticker
-	err     error
+	name             string
+	markets          []market.Market
+	tickers          []price.Ticker
+	tickersReceived  int
+	tickersRejected  int
+	metadataRefreshed bool
+	failureStage     string
+	err              error
 }
 
-// RunCycle параллельно получает котировки, затем последовательно и атомарно сохраняет их по биржам.
+// RunCycle параллельно получает котировки, сохраняет только свежие снимки и записывает историю возможностей.
 func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 	if r == nil {
 		return CycleResult{}, fmt.Errorf("scanner runner не задан")
+	}
+	if ctx == nil {
+		return CycleResult{}, fmt.Errorf("контекст сканирования не задан")
 	}
 	if !r.running.CompareAndSwap(false, true) {
 		return CycleResult{}, ErrCycleAlreadyRunning
 	}
 	defer r.running.Store(false)
 
-	result := CycleResult{StartedAt: time.Now().UTC()}
+	startedAt := time.Now().UTC()
+	result := CycleResult{
+		ID:               startedAt.Format("20060102T150405.000000000Z"),
+		Status:           CycleStatusRunning,
+		StartedAt:        startedAt,
+		ExchangesEnabled: len(r.adapters),
+	}
+	finish := func(status string) {
+		result.Status = status
+		result.FinishedAt = time.Now().UTC()
+		result.ExchangesFailed = 0
+		for _, exchangeStatus := range result.Exchanges {
+			if exchangeStatus.Error != "" {
+				result.ExchangesFailed++
+			}
+		}
+		result.ExchangesSucceeded = len(result.Exchanges) - result.ExchangesFailed
+		r.logCycle(result)
+	}
+
 	if err := ctx.Err(); err != nil {
+		result.Error = err.Error()
+		finish(CycleStatusCancelled)
 		return result, err
 	}
 	if len(r.adapters) == 0 {
-		result.FinishedAt = time.Now().UTC()
-		r.logger.Warn("цикл пропущен: нет включённых адаптеров")
+		result.Error = "нет включённых адаптеров бирж"
+		finish(CycleStatusNoData)
 		return result, nil
 	}
 
-	batches := r.collectInParallel(ctx)
+	batches := r.collectInParallel(ctx, result.ID)
+	statuses := make([]ExchangeStatus, len(batches))
+	for i, batch := range batches {
+		status := ExchangeStatus{
+			Name:              batch.name,
+			Markets:           len(batch.markets),
+			MetadataRefreshed: batch.metadataRefreshed,
+			TickersReceived:   batch.tickersReceived,
+			TickersRejected:   batch.tickersRejected,
+			FailureStage:      batch.failureStage,
+		}
+		if batch.err != nil {
+			status.Error = batch.err.Error()
+		}
+		statuses[i] = status
+
+		result.MarketsDiscovered += len(batch.markets)
+		result.TickersReceived += batch.tickersReceived
+		result.TickersRejected += batch.tickersRejected
+		if batch.metadataRefreshed {
+			result.MetadataRefreshes++
+		}
+	}
+
 	if err := ctx.Err(); err != nil {
-		result.FinishedAt = time.Now().UTC()
+		for i := range statuses {
+			if statuses[i].Error == "" {
+				statuses[i].FailureStage = "cancelled"
+				statuses[i].Error = "контекст отменён до сохранения результатов цикла"
+			}
+		}
+		result.Exchanges = statuses
+		result.Error = err.Error()
+		finish(CycleStatusCancelled)
 		return result, err
 	}
 
-	statusByIndex := make([]ExchangeStatus, len(batches))
 	quotes := make([]arbitrage.Quote, 0)
 	for i, batch := range batches {
-		status := ExchangeStatus{Name: batch.name}
+		if err := ctx.Err(); err != nil {
+			for j := i; j < len(statuses); j++ {
+				if statuses[j].Error == "" {
+					statuses[j].FailureStage = "cancelled"
+					statuses[j].Error = "контекст отменён до завершения обработки биржи"
+				}
+			}
+			break
+		}
+		status := statuses[i]
 		if batch.err != nil {
-			status.Error = batch.err.Error()
-			statusByIndex[i] = status
-			r.logger.Error("ошибка сбора биржи", "exchange", batch.name, "error", batch.err)
+			r.logger.Error("ошибка сбора биржи",
+				"cycle_id", result.ID,
+				"exchange", batch.name,
+				"stage", batch.failureStage,
+				"error", batch.err)
 			continue
 		}
 
@@ -149,17 +258,27 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 		inputs := make([]storage.MarketSnapshotInput, 0, len(batch.tickers))
 		for _, ticker := range batch.tickers {
 			if !ticker.IsFresh(now, r.config.MaxDataAge) {
+				status.TickersRejected++
+				result.TickersRejected++
 				r.logger.Warn("пропущена устаревшая или некорректная котировка",
-					"exchange", batch.name, "symbol", ticker.Symbol,
-					"timestamp", ticker.Timestamp, "received_at", ticker.ReceivedAt,
+					"cycle_id", result.ID,
+					"exchange", batch.name,
+					"symbol", ticker.Symbol,
+					"timestamp", ticker.Timestamp,
+					"received_at", ticker.ReceivedAt,
 					"exchange_timestamp", ticker.ExchangeTimestamp)
 				continue
 			}
 			item, ok := marketByKey[tickerKey(ticker)]
 			if !ok {
+				status.TickersRejected++
+				result.TickersRejected++
 				r.logger.Warn("котировка не связана с рынком текущего ответа",
-					"exchange", batch.name, "symbol", ticker.Symbol,
-					"market_type", ticker.MarketType, "contract_type", ticker.ContractType)
+					"cycle_id", result.ID,
+					"exchange", batch.name,
+					"symbol", ticker.Symbol,
+					"market_type", ticker.MarketType,
+					"contract_type", ticker.ContractType)
 				continue
 			}
 			inputs = append(inputs, storage.MarketSnapshotInput{
@@ -171,18 +290,23 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 				},
 			})
 		}
+		status.TickersAccepted = len(inputs)
+		result.TickersAccepted += len(inputs)
 
 		saved, err := r.db.PersistMarketSnapshots(ctx, batch.markets, inputs)
 		if err != nil {
+			status.FailureStage = "persist_snapshots"
 			status.Error = err.Error()
-			statusByIndex[i] = status
-			r.logger.Error("ошибка транзакционного сохранения данных биржи", "exchange", batch.name, "error", err)
+			statuses[i] = status
+			result.PersistenceErrors++
+			r.logger.Error("ошибка транзакционного сохранения данных биржи",
+				"cycle_id", result.ID, "exchange", batch.name, "error", err)
 			continue
 		}
-		status.Markets = len(batch.markets)
-		status.TickersReceived = len(batch.tickers)
 		status.SnapshotsSaved = len(saved)
-		statusByIndex[i] = status
+		statuses[i] = status
+		result.SnapshotsSaved += len(saved)
+
 		for _, item := range saved {
 			ticker := price.Ticker{
 				Exchange: item.Market.Exchange, Symbol: item.Market.Symbol,
@@ -197,22 +321,35 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 				SnapshotID: item.SnapshotID, Ticker: ticker,
 			})
 		}
-		r.logger.Info("биржа сохранена",
-			"exchange", batch.name, "markets", status.Markets,
-			"tickers", status.TickersReceived, "snapshots", status.SnapshotsSaved)
+		r.logger.Info("биржа обработана",
+			"cycle_id", result.ID,
+			"exchange", batch.name,
+			"markets", status.Markets,
+			"metadata_refreshed", status.MetadataRefreshed,
+			"tickers_received", status.TickersReceived,
+			"tickers_accepted", status.TickersAccepted,
+			"tickers_rejected", status.TickersRejected,
+			"snapshots_saved", status.SnapshotsSaved)
+	}
+	result.Exchanges = statuses
+
+	if err := ctx.Err(); err != nil {
+		result.Error = err.Error()
+		finish(CycleStatusCancelled)
+		return result, err
 	}
 
-	result.Exchanges = statusByIndex
-	detectionTime := time.Now().UTC()
-	opportunities := r.detector.Detect(quotes, detectionTime)
+	opportunities := r.detector.Detect(quotes, time.Now().UTC())
+	result.OpportunitiesDetected = len(opportunities)
 	if len(opportunities) > 0 {
 		if err := storage.NewOpportunityRepository(r.db).InsertOpportunities(ctx, opportunities); err != nil {
-			result.FinishedAt = time.Now().UTC()
+			result.Error = fmt.Sprintf("сохранить найденные возможности: %v", err)
+			result.PersistenceErrors++
+			finish(CycleStatusSaveFailed)
 			return result, fmt.Errorf("сохранить найденные возможности: %w", err)
 		}
+		result.OpportunitiesSaved = len(opportunities)
 	}
-	result.OpportunitiesDetected = len(opportunities)
-	result.FinishedAt = time.Now().UTC()
 
 	failed := 0
 	for _, status := range result.Exchanges {
@@ -220,20 +357,64 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 			failed++
 		}
 	}
-	r.logger.Info("цикл сканирования завершён",
-		"exchanges_total", len(result.Exchanges),
-		"exchanges_failed", failed,
-		"markets_saved", sumMarkets(result.Exchanges),
-		"snapshots_saved", sumSnapshots(result.Exchanges),
-		"opportunities_detected", result.OpportunitiesDetected,
-		"duration", result.FinishedAt.Sub(result.StartedAt))
+	result.ExchangesFailed = failed
+	result.ExchangesSucceeded = len(result.Exchanges) - failed
+
+	switch {
+	case result.PersistenceErrors > 0:
+		finish(CycleStatusSaveFailed)
+	case result.SnapshotsSaved == 0 && failed > 0:
+		finish(CycleStatusCollectionFailed)
+	case result.SnapshotsSaved == 0:
+		finish(CycleStatusNoData)
+	case failed > 0:
+		finish(CycleStatusPartial)
+	default:
+		finish(CycleStatusSuccess)
+	}
 	return result, nil
+}
+
+// logCycle выводит сводку цикла без перечисления всех тикеров.
+func (r *Runner) logCycle(result CycleResult) {
+	attrs := []any{
+		"cycle_id", result.ID,
+		"status", result.Status,
+		"started_at", result.StartedAt,
+		"finished_at", result.FinishedAt,
+		"duration", result.FinishedAt.Sub(result.StartedAt),
+		"exchanges_enabled", result.ExchangesEnabled,
+		"exchanges_succeeded", result.ExchangesSucceeded,
+		"exchanges_failed", result.ExchangesFailed,
+		"markets_discovered", result.MarketsDiscovered,
+		"metadata_refreshes", result.MetadataRefreshes,
+		"tickers_received", result.TickersReceived,
+		"tickers_accepted", result.TickersAccepted,
+		"tickers_rejected", result.TickersRejected,
+		"snapshots_saved", result.SnapshotsSaved,
+		"opportunities_detected", result.OpportunitiesDetected,
+		"opportunities_saved", result.OpportunitiesSaved,
+		"persistence_errors", result.PersistenceErrors,
+	}
+	if result.Error != "" {
+		attrs = append(attrs, "error", result.Error)
+	}
+	switch result.Status {
+	case CycleStatusSuccess:
+		r.logger.Info("цикл сканирования завершён", attrs...)
+	case CycleStatusCancelled:
+		r.logger.Info("цикл сканирования остановлен", attrs...)
+	case CycleStatusPartial, CycleStatusNoData, CycleStatusCollectionFailed:
+		r.logger.Warn("цикл сканирования завершён не полностью", attrs...)
+	default:
+		r.logger.Error("цикл сканирования завершён с ошибкой", attrs...)
+	}
 }
 
 // Run повторяет циклы без перекрытия и ожидает интервал после завершения каждого цикла.
 func (r *Runner) Run(ctx context.Context, interval time.Duration) error {
-	if interval <= 0 {
-		return fmt.Errorf("scan_interval должен быть положительным")
+	if interval < time.Second {
+		return fmt.Errorf("scan_interval должен быть не меньше 1s")
 	}
 	for {
 		if err := ctx.Err(); err != nil {
@@ -257,7 +438,7 @@ func (r *Runner) Run(ctx context.Context, interval time.Duration) error {
 	}
 }
 
-func (r *Runner) collectInParallel(ctx context.Context) []exchangeBatch {
+func (r *Runner) collectInParallel(ctx context.Context, cycleID string) []exchangeBatch {
 	results := make([]exchangeBatch, len(r.adapters))
 	if len(r.adapters) == 0 {
 		return results
@@ -285,84 +466,155 @@ func (r *Runner) collectInParallel(ctx context.Context) []exchangeBatch {
 				results[i].err = ctx.Err()
 				return
 			}
-			results[i] = r.collectOne(ctx, adapter)
+			results[i] = r.collectOne(ctx, adapter, cycleID)
 		}()
 	}
 	wg.Wait()
 	return results
 }
 
-func (r *Runner) collectOne(ctx context.Context, adapter exchange.Exchange) exchangeBatch {
+func (r *Runner) collectOne(ctx context.Context, adapter exchange.Exchange, cycleID string) exchangeBatch {
 	if adapter == nil {
-		return exchangeBatch{err: fmt.Errorf("адаптер не задан")}
+		return exchangeBatch{failureStage: "discover_markets", err: fmt.Errorf("адаптер не задан")}
 	}
 	name := strings.TrimSpace(adapter.Name())
 	if name == "" {
-		return exchangeBatch{err: fmt.Errorf("идентификатор биржи не задан")}
-	}
-	markets, err := adapter.DiscoverMarkets(ctx)
-	if err != nil {
-		return exchangeBatch{name: name, err: fmt.Errorf("получить список рынков: %w", err)}
+		return exchangeBatch{failureStage: "discover_markets", err: fmt.Errorf("идентификатор биржи не задан")}
 	}
 
-	validMarkets := make([]market.Market, 0, len(markets))
-	knownMarkets := make(map[string]market.Market, len(markets))
-	for _, item := range markets {
-		normalized, err := market.NormalizeMarket(item)
-		if err != nil {
-			r.logger.Warn("пропущены некорректные метаданные рынка",
-				"exchange", name, "symbol", item.Symbol, "error", err)
-			continue
+	validMarkets, refreshed, err := r.marketsFor(ctx, adapter, name, cycleID)
+	if err != nil {
+		return exchangeBatch{
+			name: name, markets: validMarkets, metadataRefreshed: refreshed,
+			failureStage: "discover_markets", err: err,
 		}
-		if !strings.EqualFold(normalized.Exchange, name) || !market.IsSupportedMarket(normalized) {
-			r.logger.Warn("пропущен неподдерживаемый рынок",
-				"exchange", name, "market_exchange", normalized.Exchange,
-				"symbol", normalized.Symbol, "active", normalized.Active,
-				"market_type", normalized.MarketType, "contract_type", normalized.ContractType)
-			continue
-		}
-		key := marketKey(normalized)
-		if _, exists := knownMarkets[key]; exists {
-			r.logger.Warn("дублирующиеся метаданные рынка пропущены",
-				"exchange", name, "symbol", normalized.Symbol,
-				"market_type", normalized.MarketType, "contract_type", normalized.ContractType)
-			continue
-		}
-		knownMarkets[key] = normalized
-		validMarkets = append(validMarkets, normalized)
 	}
 	if len(validMarkets) == 0 {
-		return exchangeBatch{name: name, err: fmt.Errorf("адаптер не вернул активных поддерживаемых Spot USDT или Perpetual рынков")}
+		return exchangeBatch{
+			name: name, metadataRefreshed: refreshed, failureStage: "discover_markets",
+			err: fmt.Errorf("не найдено активных поддерживаемых Spot USDT или Perpetual рынков"),
+		}
 	}
 
 	tickers, err := adapter.CollectTickers(ctx, validMarkets)
 	if err != nil {
-		return exchangeBatch{name: name, err: fmt.Errorf("получить пакет котировок: %w", err)}
+		return exchangeBatch{
+			name: name, markets: validMarkets, metadataRefreshed: refreshed,
+			failureStage: "collect_tickers", err: fmt.Errorf("получить пакет котировок: %w", err),
+		}
+	}
+	if len(tickers) == 0 {
+		return exchangeBatch{
+			name: name, markets: validMarkets, metadataRefreshed: refreshed,
+			failureStage: "collect_tickers", err: fmt.Errorf("адаптер вернул пустой пакет котировок"),
+		}
+	}
+
+	marketIndex := make(map[string]market.Market, len(validMarkets))
+	for _, item := range validMarkets {
+		marketIndex[marketKey(item)] = item
 	}
 	validTickers := make([]price.Ticker, 0, len(tickers))
+	rejected := 0
 	seen := make(map[string]struct{}, len(tickers))
 	for _, ticker := range tickers {
 		key := tickerKey(ticker)
-		item, exists := knownMarkets[key]
+		item, exists := marketIndex[key]
 		if !exists || !ticker.IsValid() {
+			rejected++
 			r.logger.Warn("котировка не относится к поддерживаемому рынку ответа",
-				"exchange", name, "symbol", ticker.Symbol,
+				"cycle_id", cycleID, "exchange", name, "symbol", ticker.Symbol,
 				"market_type", ticker.MarketType, "contract_type", ticker.ContractType)
 			continue
 		}
 		if _, duplicate := seen[key]; duplicate {
-			r.logger.Warn("дублирующаяся котировка пропущена", "exchange", name, "symbol", ticker.Symbol)
+			rejected++
+			r.logger.Warn("дублирующаяся котировка пропущена", "cycle_id", cycleID, "exchange", name, "symbol", ticker.Symbol)
 			continue
 		}
-		// Используем исходный символ из метаданных рынка.
 		ticker.Symbol = item.Symbol
 		ticker.Exchange = item.Exchange
 		seen[key] = struct{}{}
 		validTickers = append(validTickers, ticker)
 	}
+	if len(validTickers) == 0 {
+		return exchangeBatch{
+			name: name, markets: validMarkets, tickersReceived: len(tickers),
+			tickersRejected: rejected, metadataRefreshed: refreshed,
+			failureStage: "collect_tickers", err: fmt.Errorf("пакет не содержит корректных котировок"),
+		}
+	}
 	sort.Slice(validMarkets, func(i, j int) bool { return marketKey(validMarkets[i]) < marketKey(validMarkets[j]) })
 	sort.Slice(validTickers, func(i, j int) bool { return tickerKey(validTickers[i]) < tickerKey(validTickers[j]) })
-	return exchangeBatch{name: name, markets: validMarkets, tickers: validTickers}
+	return exchangeBatch{
+		name: name, markets: validMarkets, tickers: validTickers,
+		tickersReceived: len(tickers), tickersRejected: rejected,
+		metadataRefreshed: refreshed,
+	}
+}
+
+// marketsFor использует кэш метаданных с ограниченным сроком действия.
+// После истечения срока неудачное обновление не приводит к использованию старого списка рынков.
+func (r *Runner) marketsFor(ctx context.Context, adapter exchange.Exchange, name, cycleID string) ([]market.Market, bool, error) {
+	now := time.Now().UTC()
+	r.marketCacheMu.Lock()
+	entry, exists := r.marketCache[strings.ToLower(name)]
+	r.marketCacheMu.Unlock()
+	if exists {
+		age := now.Sub(entry.refreshedAt)
+		if age >= 0 && age < r.marketRefreshInterval {
+			return append([]market.Market(nil), entry.markets...), false, nil
+		}
+	}
+
+	discovered, err := adapter.DiscoverMarkets(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("получить список рынков: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+
+	validMarkets := make([]market.Market, 0, len(discovered))
+	seen := make(map[string]struct{}, len(discovered))
+	for _, item := range discovered {
+		normalized, err := market.NormalizeMarket(item)
+		if err != nil {
+			r.logger.Warn("пропущены некорректные метаданные рынка",
+				"cycle_id", cycleID, "exchange", name, "symbol", item.Symbol, "error", err)
+			continue
+		}
+		if !strings.EqualFold(normalized.Exchange, name) || !market.IsSupportedMarket(normalized) {
+			r.logger.Warn("пропущен неподдерживаемый рынок",
+				"cycle_id", cycleID, "exchange", name, "market_exchange", normalized.Exchange,
+				"symbol", normalized.Symbol, "active", normalized.Active,
+				"market_type", normalized.MarketType, "contract_type", normalized.ContractType)
+			continue
+		}
+		key := marketKey(normalized)
+		if _, duplicate := seen[key]; duplicate {
+			r.logger.Warn("дублирующиеся метаданные рынка пропущены",
+				"cycle_id", cycleID, "exchange", name, "symbol", normalized.Symbol,
+				"market_type", normalized.MarketType, "contract_type", normalized.ContractType)
+			continue
+		}
+		seen[key] = struct{}{}
+		validMarkets = append(validMarkets, normalized)
+	}
+	if len(validMarkets) == 0 {
+		return nil, false, fmt.Errorf("биржа не вернула активных поддерживаемых Spot USDT или Perpetual рынков")
+	}
+	sort.Slice(validMarkets, func(i, j int) bool { return marketKey(validMarkets[i]) < marketKey(validMarkets[j]) })
+
+	r.marketCacheMu.Lock()
+	r.marketCache[strings.ToLower(name)] = marketCacheEntry{
+		markets: append([]market.Market(nil), validMarkets...), refreshedAt: time.Now().UTC(),
+	}
+	r.marketCacheMu.Unlock()
+	r.logger.Info("метаданные рынков обновлены",
+		"cycle_id", cycleID, "exchange", name, "markets", len(validMarkets),
+		"refresh_interval", r.marketRefreshInterval)
+	return validMarkets, true, nil
 }
 
 func marketKey(item market.Market) string {

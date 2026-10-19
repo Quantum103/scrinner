@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"time"
 
@@ -108,9 +109,9 @@ func (c *Config) parseDurations() error {
 		)
 	}
 
-	if interval <= 0 {
+	if interval < time.Second {
 		return errors.New(
-			"scanner.interval должен быть больше нуля",
+			"scanner.interval должен быть не меньше 1s",
 		)
 	}
 
@@ -146,6 +147,11 @@ func (c *Config) parseDurations() error {
 
 // Validate проверяет значения конфигурации.
 func (c Config) Validate() error {
+	if math.IsNaN(c.Scanner.MinSpreadPercent) || math.IsInf(c.Scanner.MinSpreadPercent, 0) {
+		return errors.New(
+			"scanner.min_spread_percent должен быть конечным числом",
+		)
+	}
 	if c.Scanner.MinSpreadPercent < 0 {
 		return errors.New(
 			"scanner.min_spread_percent не может быть отрицательным",

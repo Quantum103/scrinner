@@ -54,3 +54,24 @@ database:
 		t.Fatalf("Gate должен быть выключен по умолчанию: %#v", cfg.Exchanges.Gate)
 	}
 }
+
+
+// TestLoadRejectsSubsecondScanInterval предотвращает непредусмотренно частые запросы к биржам.
+func TestLoadRejectsSubsecondScanInterval(t *testing.T) {
+	t.Parallel()
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	const yamlConfig = `scanner:
+  interval: 100ms
+  min_spread_percent: 1
+  max_data_age: 10s
+exchanges: {}
+database:
+  path: ./data/test.db
+`
+	if err := os.WriteFile(configPath, []byte(yamlConfig), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(configPath); err == nil {
+		t.Fatal("ожидалась ошибка для интервала короче одной секунды")
+	}
+}
