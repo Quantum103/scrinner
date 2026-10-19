@@ -57,7 +57,7 @@ func populateMaintenanceDB(t *testing.T, db *DB) {
 		BaseAsset: "PEPE", QuoteAsset: "USDT",
 		BuyMarketID: buyID, BuySymbol: buyMarket.Symbol, BuyExchange: buyMarket.Exchange,
 		BuyMarketType: buyMarket.MarketType, BuyContractType: buyMarket.ContractType,
-		BuyPrice: decimal.RequireFromString("100"),
+		BuyPrice:     decimal.RequireFromString("100"),
 		SellMarketID: sellID, SellSymbol: sellMarket.Symbol, SellExchange: sellMarket.Exchange,
 		SellMarketType: sellMarket.MarketType, SellContractType: sellMarket.ContractType,
 		SellPrice: decimal.RequireFromString("101"), SpreadPercent: decimal.RequireFromString("1"),
@@ -274,7 +274,7 @@ func TestBackupToWhileWriterIsActive(t *testing.T) {
 }
 
 func TestCompareBackupCountsDetectsImpossibleSnapshot(t *testing.T) {
-before := map[string]int64{
+	before := map[string]int64{
 		"schema_migrations": 4, "markets": 2, "price_snapshots": 1,
 		"opportunities": 3, "scan_cycles": 4,
 	}

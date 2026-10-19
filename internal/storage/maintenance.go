@@ -16,26 +16,26 @@ import (
 
 // IntegrityReport содержит результат проверки читаемости, целостности и версии схемы SQLite.
 type IntegrityReport struct {
-	Path                   string           `json:"path"`
-	GeneratedAt            time.Time        `json:"generated_at"`
-	IntegrityResults       []string         `json:"integrity_check"`
+	Path                  string           `json:"path"`
+	GeneratedAt           time.Time        `json:"generated_at"`
+	IntegrityResults      []string         `json:"integrity_check"`
 	ForeignKeyViolations  []string         `json:"foreign_key_violations"`
 	SchemaVersion         int64            `json:"schema_version"`
 	ExpectedSchemaVersion int64            `json:"expected_schema_version"`
 	TableCounts           map[string]int64 `json:"table_counts"`
 	MissingTables         []string         `json:"missing_tables"`
-	Issues                 []string         `json:"issues"`
-	Warnings               []string         `json:"warnings"`
-	OK                     bool             `json:"ok"`
+	Issues                []string         `json:"issues"`
+	Warnings              []string         `json:"warnings"`
+	OK                    bool             `json:"ok"`
 }
 
 // BackupReport описывает проверенную резервную копию и её содержимое.
 type BackupReport struct {
-	Output       string           `json:"output"`
-	GeneratedAt  time.Time        `json:"generated_at"`
-	TableCounts  map[string]int64 `json:"table_counts"`
-	Integrity    IntegrityReport  `json:"integrity"`
-	Warnings     []string         `json:"warnings"`
+	Output      string           `json:"output"`
+	GeneratedAt time.Time        `json:"generated_at"`
+	TableCounts map[string]int64 `json:"table_counts"`
+	Integrity   IntegrityReport  `json:"integrity"`
+	Warnings    []string         `json:"warnings"`
 }
 
 // OpenReadOnly открывает уже существующий файл SQLite без создания файла и без применения миграций.
@@ -73,14 +73,14 @@ func OpenReadOnly(ctx context.Context, path string) (*DB, error) {
 // CheckDatabase проверяет SQLite без миграций и без изменения исторических записей.
 func CheckDatabase(ctx context.Context, path, migrationsDir string) (IntegrityReport, error) {
 	report := IntegrityReport{
-		Path: filepath.Clean(path),
-		GeneratedAt: time.Now().UTC(),
-		IntegrityResults: []string{},
+		Path:                 filepath.Clean(path),
+		GeneratedAt:          time.Now().UTC(),
+		IntegrityResults:     []string{},
 		ForeignKeyViolations: []string{},
-		TableCounts: make(map[string]int64),
-		MissingTables: []string{},
-		Issues: []string{},
-		Warnings: []string{},
+		TableCounts:          make(map[string]int64),
+		MissingTables:        []string{},
+		Issues:               []string{},
+		Warnings:             []string{},
 	}
 	expectedVersion, versions, err := expectedMigrations(migrationsDir)
 	if err != nil {
@@ -263,10 +263,10 @@ func (d *DB) checkSchema(ctx context.Context, expectedVersions []int64, report *
 // BackupTo создаёт онлайн-снимок SQLite через VACUUM INTO, проверяет его и только затем публикует файл.
 func (d *DB) BackupTo(ctx context.Context, output string, force bool, migrationsDir string) (BackupReport, error) {
 	result := BackupReport{
-		Output: filepath.Clean(output),
+		Output:      filepath.Clean(output),
 		GeneratedAt: time.Now().UTC(),
 		TableCounts: make(map[string]int64),
-		Warnings: []string{},
+		Warnings:    []string{},
 	}
 	if d == nil || d.db == nil || strings.TrimSpace(d.path) == "" {
 		return result, errors.New("открытая SQLite-база не содержит исходного пути")
@@ -441,7 +441,7 @@ func expectedMigrations(directory string) (int64, []int64, error) {
 		return 0, nil, fmt.Errorf("прочитать каталог миграций %q: %w", directory, err)
 	}
 	type migrationVersion struct {
-		name string
+		name    string
 		version int64
 	}
 	var migrations []migrationVersion
