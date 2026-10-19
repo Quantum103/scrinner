@@ -14,6 +14,7 @@
 - **MEXC** — Spot и USDT Perpetual.
 - **OKX** — Spot и линейные USDT-margined SWAP Perpetual.
 - **Gate.io** — Spot и линейные USDT Perpetual.
+- **Bitget API V3** — Spot и USDT-margined Perpetual.
 
 Адаптеры используют общие модели `Market` и `Ticker`, нормализатор и существующие SQLite-репозитории. Spot и Perpetual остаются отдельными рынками, даже если относятся к одному базовому активу. Оригинальные символы бирж сохраняются без изменения.
 
@@ -123,9 +124,37 @@
 
 HTTP-клиент переиспользуется, закрывает тела ответов, ограничивает размер ответа и время запроса, уважает отмену context, разбирает `label`/`message` у ошибок Gate, повторяет только временные сетевые сбои, HTTP 429 и 5xx ограниченное число раз. Ошибки клиента и ошибки JSON возвращаются вызывающему коду.
 
+## Bitget API V3
+
+Адаптер использует только публичный REST API V3 с базовым URL `https://api.bitget.com`. Ключи и подпись не нужны; запросы выставления ордеров отсутствуют. Все четыре метода имеют лимит **20 запросов в секунду на IP** по актуальной официальной документации. Обычный проход Bitget использует два bulk-запроса инструментов и максимум два bulk-запроса котировок.
+
+| Назначение | Метод и путь | Поля и лимит |
+|---|---|---|
+| Spot-инструменты | `GET /api/v3/market/instruments?category=SPOT` | `category`, `symbol`, `baseCoin`, `quoteCoin`, `status`, `symbolType`, при наличии `instrumentType`, `isRwa`, `isReality`; 20 req/s/IP. |
+| USDT Futures-инструменты | `GET /api/v3/market/instruments?category=USDT-FUTURES` | Те же структурированные поля и `type` (`perpetual`/`delivery`); 20 req/s/IP. |
+| Spot-котировки | `GET /api/v3/market/tickers?category=SPOT` | `symbol`, `bid1Price`, `ask1Price`, `volume24h`, `turnover24h`, `ts`; 20 req/s/IP. |
+| USDT Futures-котировки | `GET /api/v3/market/tickers?category=USDT-FUTURES` | Те же поля; дополнительные `markPrice` и `indexPrice` не используются для bid/ask; 20 req/s/IP. |
+
+Официальные источники: [Get Instruments](https://www.bitget.com/docs/catalog/market-market-data/market-instruments), [Market Data / Get Tickers](https://www.bitget.com/docs/catalog/market/market-data), [руководство по переходу на UTA](https://www.bitget.com/docs/classic/uta-api-upgrade-guide).
+
+### Фильтрация инструментов
+
+- Принимаются только категории `SPOT` и `USDT-FUTURES`, котируемый актив `USDT`, непустые структурированные `baseCoin`/`quoteCoin` и `status=online`. Неизвестные статусы пропускаются с диагностикой; `listed`, `limit_open`, `limit_close`, `offline` и `restrictedAPI` не считаются полноценной двусторонней доступностью.
+- Для Futures требуется `type=perpetual`; `delivery` и неизвестные типы исключаются. `COIN-FUTURES`, `USDC-FUTURES`, margin и опционы не запрашиваются.
+- По документированному `symbolType` разрешается только `crypto`; металлы, акции и сырьевые инструменты исключаются. Если `instrumentType` присутствует, он также проверяется как дополнительный классификатор. Положительные `isRwa=YES` и Spot `isReality=yes` исключаются; отсутствующие необязательные флаги не требуют фиктивных значений.
+- Символ хранится без преобразования. Один и тот же `BTCUSDT` у Bitget сохраняется как два разных рынка — Spot и Perpetual — через существующие типы и canonical key.
+
+### Котировки, объёмы и время
+
+- Bid и Ask берутся только из `bid1Price` и `ask1Price`. `lastPrice`, `markPrice` и `indexPrice` не являются заменой лучшим ценам.
+- `volume24h` сохраняется как объём базового актива; `turnover24h` — отдельный показатель оборота, он не подменяет `Volume24h`. Цены и объёмы разбираются через `shopspring/decimal` без промежуточного `float64`.
+- `ts` — Unix-время в миллисекундах. Оно преобразуется в UTC и сохраняется в `Timestamp`/ `ExchangeTimestamp`; `ReceivedAt` отдельно отражает локальное время получения HTTP-ответа.
+- Размеры `bid1Size` и `ask1Size` декодируются как отдельные поля ответа, но не записываются в общую модель: она не содержит полей размера лучших уровней.
+- Клиент проверяет HTTP-статус и прикладной `code=00000`, ограничивает timeout и размер ответа, закрывает тело ответа, уважает отмену context, учитывает `Retry-After` для 429 и ограниченно повторяет сетевые ошибки и 5xx. Пустой `data` не считается успешным обновлением.
+
 ## Конфигурация
 
-Для каждого адаптера используется существующий раздел `exchanges`. MEXC, OKX и Gate по умолчанию выключены, чтобы сохранить прежнее поведение. Чтобы включить эти адаптеры, задай:
+Для каждого адаптера используется существующий раздел `exchanges`. MEXC, OKX, Gate и Bitget по умолчанию выключены, чтобы сохранить прежнее поведение. Чтобы включить эти адаптеры, задай:
 
 ```yaml
 exchanges:
@@ -140,6 +169,8 @@ exchanges:
     enabled: true
     # Необязательно; по умолчанию https://api.gateio.ws
     # base_url: https://api.gateio.ws
+  bitget:
+    enabled: true
 ```
 
 У OKX `base_url` необязателен. Все запросы публичные, API-ключи не нужны. Настройки Bybit, Binance, интервал сканирования, порог спреда и путь SQLite менять не требуется. Выключенный адаптер не создаёт HTTP-клиент и не обращается к соответствующей бирже.
@@ -154,5 +185,5 @@ go vet ./...
 go run ./cmd/scanner
 ```
 
-Unit-тесты MEXC, OKX и Gate используют `httptest` и не требуют доступа к публичной бирже. Проверка реального API может зависеть от сетевых или региональных ограничений; при ошибке биржевой API адаптер возвращает её и не генерирует фиктивные котировки.
+Unit-тесты MEXC, OKX, Gate и Bitget используют `httptest` и не требуют доступа к публичной бирже. Проверка реального API может зависеть от сетевых или региональных ограничений; при ошибке биржевой API адаптер возвращает её и не генерирует фиктивные котировки.
 
