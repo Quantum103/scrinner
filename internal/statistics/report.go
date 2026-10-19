@@ -200,10 +200,10 @@ func Build(ctx context.Context, db *storage.DB, options Options) (Report, error)
 
 	b := &builder{
 		location: location,
-		gap:    options.MaxObservationGap,
-		coins:  make(map[string]*accumulator),
-		routes: make(map[routeKey]*accumulator),
-		unique: make(map[string]struct{}),
+		gap:      options.MaxObservationGap,
+		coins:    make(map[string]*accumulator),
+		routes:   make(map[routeKey]*accumulator),
+		unique:   make(map[string]struct{}),
 	}
 	for hour := range b.hours {
 		b.hours[hour] = &hourAccumulator{}
