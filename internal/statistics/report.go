@@ -350,9 +350,11 @@ func Build(ctx context.Context, db *storage.DB, options Options) (Report, error)
 	}
 
 	for i, metric := range b.report.Overall.Thresholds {
-		complete := b.report.Cycles.Total > 0 && b.report.Observations > 0 &&
-			b.report.InvalidObservationsSkipped == 0 && b.report.LegacyObservations == 0 &&
-			!b.cycleMinUnknown && b.cyclesWithHighMinimum[i] == 0
+		complete := b.report.Cycles.Total > 0 &&
+			b.report.Cycles.Successful == b.report.Cycles.Total &&
+			b.report.Observations > 0 && b.report.InvalidObservationsSkipped == 0 &&
+			b.report.LegacyObservations == 0 && !b.cycleMinUnknown &&
+			b.cyclesWithHighMinimum[i] == 0
 		b.report.Overall.Thresholds[i].CoverageComplete = complete
 		for coinIndex := range b.report.Coins {
 			b.report.Coins[coinIndex].Thresholds[i].CoverageComplete = complete
@@ -377,6 +379,8 @@ func Build(ctx context.Context, db *storage.DB, options Options) (Report, error)
 	if b.report.Observations > 0 {
 		b.report.Warnings = append(b.report.Warnings,
 			"Статистика отражает только сохранённые сигналы детектора выше действовавшего порога, а не все сочетания рынков и не чистую прибыль.")
+		b.report.Warnings = append(b.report.Warnings,
+			"Эпизоды рассчитываются только по наблюдениям внутри выбранного периода. Если эпизод начался до границы периода, он может учитываться с первого наблюдения внутри диапазона; длительность не включает время за его пределами.")
 		b.report.Warnings = append(b.report.Warnings,
 			"Эпизоды рассчитаны по положительным наблюдениям: отрицательные состояния рынка не сохраняются, поэтому фактический момент исчезновения спреда между циклами неизвестен; эпизодная статистика имеет ограниченную полноту.")
 		b.report.Warnings = append(b.report.Warnings,
