@@ -15,13 +15,13 @@ func TestDetectorSupportsAllFourMarketCombinations(t *testing.T) {
 	spotContract := market.ContractTypeSpot
 	perpetualContract := market.ContractTypePerpetual
 	tests := []struct {
-		name       string
-		buyType    market.MarketType
-		buyContract market.ContractType
-		buySymbol  string
-		sellType   market.MarketType
+		name         string
+		buyType      market.MarketType
+		buyContract  market.ContractType
+		buySymbol    string
+		sellType     market.MarketType
 		sellContract market.ContractType
-		sellSymbol string
+		sellSymbol   string
 	}{
 		{"Spot to Spot", spot, spotContract, "BTCUSDT", spot, spotContract, "BTC_USDT"},
 		{"Spot to Perpetual", spot, spotContract, "BTCUSDT", perpetual, perpetualContract, "BTCUSDT"},
