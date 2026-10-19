@@ -570,15 +570,15 @@ func SortCoins(items []CoinSummary, sortBy string) {
 		a, b := items[i], items[j]
 		switch sortBy {
 		case "episodes":
-			return thresholdNumber(a, 0, func(t ThresholdMetrics) int64 { return t.Episodes }) >
-				thresholdNumber(b, 0, func(t ThresholdMetrics) int64 { return t.Episodes })
+			return thresholdNumber(a.GroupSummary, 0, func(t ThresholdMetrics) int64 { return t.Episodes }) >
+				thresholdNumber(b.GroupSummary, 0, func(t ThresholdMetrics) int64 { return t.Episodes })
 		case "avg-spread":
 			return a.AverageSpread.GreaterThan(b.AverageSpread)
 		case "max-spread":
 			return a.MaxSpread.GreaterThan(b.MaxSpread)
 		case "duration":
-			return thresholdNumber(a, 0, func(t ThresholdMetrics) int64 { return t.TotalObservedDurationSeconds }) >
-				thresholdNumber(b, 0, func(t ThresholdMetrics) int64 { return t.TotalObservedDurationSeconds })
+			return thresholdNumber(a.GroupSummary, 0, func(t ThresholdMetrics) int64 { return t.TotalObservedDurationSeconds }) >
+				thresholdNumber(b.GroupSummary, 0, func(t ThresholdMetrics) int64 { return t.TotalObservedDurationSeconds })
 		default:
 			return a.Observations > b.Observations
 		}

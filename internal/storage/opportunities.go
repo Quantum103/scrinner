@@ -87,9 +87,10 @@ func insertOpportunity(
 			buy_symbol,
 			sell_symbol,
 			buy_snapshot_id,
-			sell_snapshot_id
+			sell_snapshot_id,
+			cycle_id
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		utcText(o.Timestamp),
 		o.Symbol,
 		o.BaseAsset,
@@ -109,6 +110,7 @@ func insertOpportunity(
 		nullableText(o.SellSymbol),
 		nullableID(o.BuySnapshotID),
 		nullableID(o.SellSnapshotID),
+		nullableText(o.CycleID),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("сохранить opportunity: %w", err)
