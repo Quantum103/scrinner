@@ -42,7 +42,9 @@ stats:
 	}
 	var report struct {
 		Observations int64 `json:"observations"`
-		Cycles struct { Total int64 `json:"total"` } `json:"cycles"`
+		Cycles struct {
+			Total int64 `json:"total"`
+		} `json:"cycles"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatalf("не удалось разобрать JSON: %v; output=%s", err, stdout.String())
@@ -51,7 +53,9 @@ stats:
 		t.Fatalf("пустая база должна дать пустой отчёт: %#v", report)
 	}
 	db, err := storage.Open(context.Background(), databasePath)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 	var cycles int
 	if err := db.SQLDB().QueryRowContext(context.Background(), "SELECT COUNT(*) FROM scan_cycles").Scan(&cycles); err != nil {
@@ -65,12 +69,16 @@ stats:
 func TestParseStatsPeriodAndValidation(t *testing.T) {
 	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
 	since, until, err := parseStatsPeriod("7d", "", "", false, now)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !until.Equal(now) || !since.Equal(now.Add(-7*24*time.Hour)) {
 		t.Fatalf("7d должен означать последние 168 часов: %s — %s", since, until)
 	}
 	since, until, err = parseStatsPeriod("", "2026-10-01T00:00:00+02:00", "2026-10-02T00:00:00+02:00", false, now)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if since.Format(time.RFC3339) != "2026-09-30T22:00:00Z" || until.Format(time.RFC3339) != "2026-10-01T22:00:00Z" {
 		t.Fatalf("границы периода должны переводиться в UTC: %s — %s", since, until)
 	}
