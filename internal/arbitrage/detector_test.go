@@ -137,7 +137,7 @@ func TestDetectorRejectsLargeTimestampSkewAndDuplicateDirections(t *testing.T) {
 	detector, _ := NewDetector(decimal.NewFromInt(1), 10*time.Second)
 	buy := detectorQuote("binance", "BTCUSDT", market.MarketTypeSpot, market.ContractTypeSpot, "BTC", "USDT", "99", "100", 1, now)
 	sell := detectorQuote("bybit", "BTCUSDT", market.MarketTypeSpot, market.ContractTypeSpot, "BTC", "USDT", "102", "103", 2, now)
-	oldEvent := now.Add(-6 * time.Second)
+	oldEvent := now.Add(-7 * time.Second)
 	sell.Ticker.ExchangeTimestamp = &oldEvent
 	// ReceivedAt и основная метка свежие, но источник сильно отстаёт относительно первой котировки.
 	if got := detector.Detect([]Quote{buy, sell}, now); len(got) != 0 {
