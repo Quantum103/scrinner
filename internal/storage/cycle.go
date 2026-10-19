@@ -161,4 +161,3 @@ func marketStorageKey(item market.Market) string {
 		strings.ToUpper(strings.TrimSpace(item.Symbol)) + "|" +
 		string(item.MarketType) + "|" + string(item.ContractType)
 }
-
