@@ -20,8 +20,8 @@ import (
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/okx"
 	"github.com/example/crypto-arbitrage-scanner/internal/market"
 	"github.com/example/crypto-arbitrage-scanner/internal/price"
-	"github.com/example/crypto-arbitrage-scanner/internal/storage"
 	scanengine "github.com/example/crypto-arbitrage-scanner/internal/scanner"
+	"github.com/example/crypto-arbitrage-scanner/internal/storage"
 	"github.com/shopspring/decimal"
 )
 
