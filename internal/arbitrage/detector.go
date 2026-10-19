@@ -34,10 +34,14 @@ func NewDetector(minSpreadPercent decimal.Decimal, maxDataAge time.Duration) (*D
 	if maxDataAge <= 0 {
 		return nil, fmt.Errorf("maxDataAge должен быть положительным")
 	}
+	maxQuoteSkew := maxDataAge / 2
+	if maxQuoteSkew <= 0 {
+		maxQuoteSkew = maxDataAge
+	}
 	return &Detector{
 		MinSpreadPercent: minSpreadPercent,
 		MaxDataAge:       maxDataAge,
-		MaxQuoteSkew:     maxDataAge,
+		MaxQuoteSkew:     maxQuoteSkew,
 	}, nil
 }
 
