@@ -200,8 +200,8 @@ func Build(ctx context.Context, db *storage.DB, options Options) (Report, error)
 
 	b := &builder{
 		location: location,
-		gap: options.MaxObservationGap,
-		coins: make(map[string]*accumulator),
+		gap:    options.MaxObservationGap,
+		coins:  make(map[string]*accumulator),
 		routes: make(map[routeKey]*accumulator),
 		unique: make(map[string]struct{}),
 	}
@@ -342,8 +342,8 @@ func Build(ctx context.Context, db *storage.DB, options Options) (Report, error)
 		for i, threshold := range spreadThresholds {
 			hourReport.Thresholds = append(hourReport.Thresholds, HourThreshold{
 				ThresholdPercent: threshold.String(),
-				Observations:    values.thresholdCounts[i],
-				EpisodesStarted: values.episodesStarted[i],
+				Observations:     values.thresholdCounts[i],
+				EpisodesStarted:  values.episodesStarted[i],
 			})
 		}
 		b.report.Hours = append(b.report.Hours, hourReport)
@@ -396,7 +396,7 @@ func Build(ctx context.Context, db *storage.DB, options Options) (Report, error)
 func newAccumulator(gap time.Duration, location *time.Location, onEpisode func(int, time.Time)) *accumulator {
 	a := &accumulator{gap: gap, location: location, onEpisode: onEpisode, seen: make(map[string]struct{})}
 	for i := range a.thresholds {
-		a.thresholds[i] = &thresholdAccumulator{seen:make(map[string]struct{})}
+		a.thresholds[i] = &thresholdAccumulator{seen: make(map[string]struct{})}
 	}
 	return a
 }

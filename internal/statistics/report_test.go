@@ -68,12 +68,16 @@ func addObservation(t *testing.T, db *storage.DB, cycleID string, at time.Time, 
 	minimum := decimal.RequireFromString("0.5")
 	if err := db.StartScanCycle(ctx, storage.ScanCycle{
 		ID: cycleID, StartedAt: at, EnabledExchanges: 2, MinSpreadPercent: minimum,
-	}); err != nil { t.Fatal(err) }
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.FinishScanCycle(ctx, storage.ScanCycle{
 		ID: cycleID, StartedAt: at, FinishedAt: at.Add(time.Second),
 		Status: "success", EnabledExchanges: 2, SucceededExchanges: 2,
 		MinSpreadPercent: minimum,
-	}); err != nil { t.Fatal(err) }
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	buyPrice := decimal.RequireFromString("100")
 	spreadValue := decimal.RequireFromString(spread)
@@ -107,7 +111,7 @@ func TestBuildThresholdCountsEpisodesAndPeriodBoundary(t *testing.T) {
 	}
 
 	report, err := Build(context.Background(), db, Options{
-		Since: start, Until: start.Add(3 * time.Minute), Timezone: "UTC", MaxObservationGap:60 * time.Second,
+		Since: start, Until: start.Add(3 * time.Minute), Timezone: "UTC", MaxObservationGap: 60 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +125,7 @@ func TestBuildThresholdCountsEpisodesAndPeriodBoundary(t *testing.T) {
 	if got := report.Overall.MaxSpread.String(); got != "3" {
 		t.Fatalf("максимальный спред = %s, ожидалось 3", got)
 	}
-	if report.Overall.MaxSpreadAt == nil || !report.Overall.MaxSpreadAt.Equal(start.Add(150 * time.Second)) {
+	if report.Overall.MaxSpreadAt == nil || !report.Overall.MaxSpreadAt.Equal(start.Add(150*time.Second)) {
 		t.Fatalf("неверное время максимального спреда: %#v", report.Overall.MaxSpreadAt)
 	}
 	thresholds := report.Overall.Thresholds
@@ -145,7 +149,7 @@ func TestBuildThresholdCountsEpisodesAndPeriodBoundary(t *testing.T) {
 	}
 
 	bounded, err := Build(context.Background(), db, Options{
-		Since: start, Until: start.Add(150 * time.Second), Timezone: "UTC", MaxObservationGap:60 * time.Second,
+		Since: start, Until: start.Add(150 * time.Second), Timezone: "UTC", MaxObservationGap: 60 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +171,7 @@ func TestBuildSeparatesAllFourMarketTypeCombinations(t *testing.T) {
 			combo.base, combo.buy, combo.sell, "1")
 	}
 	report, err := Build(context.Background(), db, Options{
-		Since: start, Until: start.Add(time.Hour), Timezone: "UTC", MaxObservationGap:60 * time.Second,
+		Since: start, Until: start.Add(time.Hour), Timezone: "UTC", MaxObservationGap: 60 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -184,7 +188,7 @@ func TestEmptyPeriodAndRenderFormats(t *testing.T) {
 	db := openStatisticsDB(t)
 	start := time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC)
 	report, err := Build(context.Background(), db, Options{
-		Since: start, Until: start.Add(24 * time.Hour), Timezone: "UTC", MaxObservationGap:time.Minute,
+		Since: start, Until: start.Add(24 * time.Hour), Timezone: "UTC", MaxObservationGap: time.Minute,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -259,7 +263,7 @@ func TestStreamAndReportPreserveLegacyObservationWithoutCycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	report, err := Build(context.Background(), db, Options{
-		Since: start, Until: start.Add(time.Hour), Timezone: "UTC", MaxObservationGap:time.Minute,
+		Since: start, Until: start.Add(time.Hour), Timezone: "UTC", MaxObservationGap: time.Minute,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -289,7 +293,7 @@ func TestMaxObservationGapSeparatesEpisodes(t *testing.T) {
 	db := openStatisticsDB(t)
 	start := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	addObservation(t, db, "gap-a", start, "BTC", "spot", "spot", "1")
-	addObservation(t, db, "gap-b", start.Add(90 * time.Second), "BTC", "spot", "spot", "1.5")
+	addObservation(t, db, "gap-b", start.Add(90*time.Second), "BTC", "spot", "spot", "1.5")
 	report, err := Build(context.Background(), db, Options{
 		Since: start, Until: start.Add(2 * time.Minute), Timezone: "UTC", MaxObservationGap: 60 * time.Second,
 	})

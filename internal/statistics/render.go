@@ -202,7 +202,9 @@ func RenderText(w io.Writer, report Report, limit int, sortBy string) error {
 	fmt.Fprintf(writer, "НАПРАВЛЕНИЯ (сортировка: %s, строк: %d)\n", sortLabel(sortBy), minInt(limit, len(routes)))
 	fmt.Fprintln(writer, "Покупка\tПродажа\tТип покупки\tТип продажи\tНаблюдения\tУникальные\tСредний спред\tМаксимум\tЭпизоды ≥1%\tЭпизоды ≥2%\tЭпизоды ≥3%\tСредняя длительность ≥1%, сек\tМаксимальная длительность ≥1%, сек")
 	for i, route := range routes {
-		if i >= limit { break }
+		if i >= limit {
+			break
+		}
 		fmt.Fprintf(writer, "%s\t%s\t%s/%s\t%s/%s\t%d\t%d\t%s%%\t%s%%\t%d\t%d\t%d\t%d\t%d\n",
 			route.BuyExchange, route.SellExchange,
 			route.BuyMarketType, route.BuyContractType, route.SellMarketType, route.SellContractType,
