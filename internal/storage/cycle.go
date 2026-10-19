@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -163,7 +162,3 @@ func marketStorageKey(item market.Market) string {
 		string(item.MarketType) + "|" + string(item.ContractType)
 }
 
-// Ensure the public transaction helper remains type-checked against database/sql executors.
-var _ interface {
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
-} = (*sql.Tx)(nil)
