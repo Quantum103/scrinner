@@ -29,7 +29,7 @@ jobs:
 
       - name: Проверить форматирование изменённых пакетов Stage 10
         run: |
-          gofmt -d cmd/scanner/main.go internal/arbitrage/detector.go internal/arbitrage/detector_test.go internal/exchange/bybit/tickers.go internal/price/snapshot.go internal/price/snapshot_test.go internal/scanner/runner.go internal/scanner/runner_test.go internal/storage/cycle.go internal/storage/cycle_test.go internal/storage/opportunities.go internal/storage/prices.go
+          gofmt -d cmd/scanner/main.go internal/arbitrage/detector.go internal/arbitrage/detector_test.go internal/exchange/bybit/tickers.go internal/price/snapshot.go internal/price/snapshot_test.go internal/scanner/runner.go internal/scanner/runner_test.go internal/scanner/runner_guard_test.go internal/storage/cycle.go internal/storage/cycle_test.go internal/storage/opportunities.go internal/storage/prices.go
           unformatted="$(gofmt -l cmd/scanner/main.go internal/arbitrage/detector.go internal/arbitrage/detector_test.go internal/exchange/bybit/tickers.go internal/price/snapshot.go internal/price/snapshot_test.go internal/scanner/runner.go internal/scanner/runner_test.go internal/storage/cycle.go internal/storage/cycle_test.go internal/storage/opportunities.go internal/storage/prices.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
