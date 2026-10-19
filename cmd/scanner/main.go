@@ -80,7 +80,7 @@ func main() {
 		logger.Error("scanner stopped with an error", "error", err)
 		os.Exit(1)
 	}
-
+}
 
 // runBybitPass выполняет один исследовательский проход без scheduler и detector.
 func runBybitPass(ctx context.Context, logger *slog.Logger, db *storage.DB) error {
