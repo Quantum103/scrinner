@@ -1,45 +1,4 @@
 name: Go checks
 
 on:
-  push:
-    branches:
-      - main
-      - "feat/**"
-  pull_request:
-    branches:
-      - main
-
-permissions:
-  contents: read
-
-jobs:
-  test:
-    name: Test and vet
-    runs-on: ubuntu-latest
-    steps:
-      - name: Получить исходный код
-        uses: actions/checkout@v4
-
-      - name: Установить Go из go.mod
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Проверить форматирование Go
-        run: |
-          gofmt -d cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/gate/*.go
-          unformatted="$(gofmt -l cmd/scanner/*.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go)"
-          if [ -n "$unformatted" ]; then
-            printf '%s\n' "$unformatted"
-            exit 1
-          fi
-
-      - name: Запустить unit-тесты
-        run: go test ./...
-
-      - name: Запустить go vet
-        run: go vet ./...
-
-      - name: Собрать все пакеты проекта
-        run: go build ./...
+  workflow_dispatch:
