@@ -95,7 +95,6 @@ func TestPersistMarketSnapshotsReturnsCorrectMarketAndSnapshotIDs(t *testing.T) 
 	}
 }
 
-
 func TestInsertOpportunitiesRollsBackWholeBatchOnInvalidRecord(t *testing.T) {
 	ctx := context.Background()
 	db, err := Open(ctx, filepath.Join(t.TempDir(), "opportunity-rollback.db"))
@@ -136,7 +135,7 @@ func TestInsertOpportunitiesRollsBackWholeBatchOnInvalidRecord(t *testing.T) {
 		BuyExchange: buyMarket.Exchange, BuyMarketType: buyMarket.MarketType,
 		BuyContractType: buyMarket.ContractType, BuyPrice: decimal.NewFromInt(100),
 		BuySnapshotID: saved[0].SnapshotID,
-		SellMarketID: saved[1].MarketID, SellSymbol: sellMarket.Symbol,
+		SellMarketID:  saved[1].MarketID, SellSymbol: sellMarket.Symbol,
 		SellExchange: sellMarket.Exchange, SellMarketType: sellMarket.MarketType,
 		SellContractType: sellMarket.ContractType, SellPrice: decimal.NewFromInt(102),
 		SellSnapshotID: saved[1].SnapshotID, SpreadPercent: decimal.NewFromInt(2),
