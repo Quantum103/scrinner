@@ -135,7 +135,7 @@ HTTP-клиент переиспользуется, закрывает тела 
 | Spot-котировки | `GET /api/v3/market/tickers?category=SPOT` | `symbol`, `bid1Price`, `ask1Price`, `volume24h`, `turnover24h`, `ts`; 20 req/s/IP. |
 | USDT Futures-котировки | `GET /api/v3/market/tickers?category=USDT-FUTURES` | Те же поля; дополнительные `markPrice` и `indexPrice` не используются для bid/ask; 20 req/s/IP. |
 
-Официальные источники: [Get Instruments](https://www.bitget.com/docs/catalog/market-market-data/market-instruments), [Market Data / Get Tickers](https://www.bitget.com/docs/catalog/market/market-data), [руководство по переходу на UTA](https://www.bitget.com/docs/classic/uta-api-upgrade-guide).
+Официальные источники: [Get Instruments и Get Tickers](https://www.bitget.com/docs/catalog/market/market-data), [руководство по переходу на UTA](https://www.bitget.com/docs/classic/uta-api-upgrade-guide).
 
 ### Фильтрация инструментов
 
@@ -147,7 +147,7 @@ HTTP-клиент переиспользуется, закрывает тела 
 ### Котировки, объёмы и время
 
 - Bid и Ask берутся только из `bid1Price` и `ask1Price`. `lastPrice`, `markPrice` и `indexPrice` не являются заменой лучшим ценам.
-- `volume24h` сохраняется как объём базового актива; `turnover24h` — отдельный показатель оборота, он не подменяет `Volume24h`. Цены и объёмы разбираются через `shopspring/decimal` без промежуточного `float64`.
+- Для Spot пример официальной документации показывает `volume24h` как количество базового актива и `turnover24h` как оборот в котируемой валюте. Для Futures документация V3 определяет поля как 24-часовые объём и оборот, но явно не расписывает единицы для каждой категории; адаптер поэтому передаёт `volume24h` без пересчёта и не подставляет вместо него `turnover24h`. Цены и объёмы разбираются через `shopspring/decimal` без промежуточного `float64`.
 - `ts` — Unix-время в миллисекундах. Оно преобразуется в UTC и сохраняется в `Timestamp`/ `ExchangeTimestamp`; `ReceivedAt` отдельно отражает локальное время получения HTTP-ответа.
 - Размеры `bid1Size` и `ask1Size` декодируются как отдельные поля ответа, но не записываются в общую модель: она не содержит полей размера лучших уровней.
 - Клиент проверяет HTTP-статус и прикладной `code=00000`, ограничивает timeout и размер ответа, закрывает тело ответа, уважает отмену context, учитывает `Retry-After` для 429 и ограниченно повторяет сетевые ошибки и 5xx. Пустой `data` не считается успешным обновлением.
