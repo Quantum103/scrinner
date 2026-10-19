@@ -42,9 +42,9 @@ type ExchangeStatus struct {
 
 // CycleResult описывает частичный или полный результат цикла.
 type CycleResult struct {
-	StartedAt            time.Time
+	StartedAt             time.Time
 	FinishedAt            time.Time
-	Exchanges              []ExchangeStatus
+	Exchanges             []ExchangeStatus
 	OpportunitiesDetected int
 }
 
@@ -167,7 +167,7 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 				Snapshot: storage.PriceSnapshot{
 					Timestamp: ticker.Timestamp, ReceivedAt: ticker.ReceivedAt,
 					ExchangeTimestamp: ticker.ExchangeTimestamp,
-					Bid: ticker.Bid, Ask: ticker.Ask, Volume24h: ticker.Volume24h,
+					Bid:               ticker.Bid, Ask: ticker.Ask, Volume24h: ticker.Volume24h,
 				},
 			})
 		}
