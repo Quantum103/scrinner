@@ -17,7 +17,8 @@ import (
 
 // DB предоставляет доступ к SQLite-базе и управляет её миграциями.
 type DB struct {
-	db *sql.DB
+	db   *sql.DB
+	path string
 }
 
 // Open открывает SQLite-базу, создаёт каталог файла и применяет основные настройки соединения.
@@ -50,7 +51,12 @@ func Open(ctx context.Context, path string) (*DB, error) {
 		return nil, fmt.Errorf("проверить соединение SQLite: %w", err)
 	}
 
-	return &DB{db: db}, nil
+	absolutePath, err := filepath.Abs(path)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("определить абсолютный путь SQLite: %w", err)
+	}
+	return &DB{db: db, path: absolutePath}, nil
 }
 
 // Close закрывает пул соединений с SQLite.
