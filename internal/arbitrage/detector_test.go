@@ -182,6 +182,32 @@ func TestDetectorRejectsLargeTimestampSkewAndDuplicateDirections(t *testing.T) {
 	}
 }
 
+func TestDetectorUsesMaxDataAgeSeparatelyFromQuoteSkew(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	detector, err := NewDetector(decimal.NewFromInt(1), 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buy := detectorQuote("binance", "BTCUSDT", market.MarketTypeSpot, market.ContractTypeSpot, "BTC", "USDT", "99", "100", 30, now)
+	sell := detectorQuote("bybit", "BTCUSDT", market.MarketTypeSpot, market.ContractTypeSpot, "BTC", "USDT", "102", "103", 31, now)
+
+	buyTime := now.Add(-7 * time.Second)
+	sellTime := now.Add(-6500 * time.Millisecond)
+	buy.Ticker.Timestamp = buyTime
+	buy.Ticker.ReceivedAt = now.Add(-time.Second)
+	buy.Ticker.ExchangeTimestamp = &buyTime
+	sell.Ticker.Timestamp = sellTime
+	sell.Ticker.ReceivedAt = now.Add(-time.Second)
+	sell.Ticker.ExchangeTimestamp = &sellTime
+
+	got := detector.Detect([]Quote{buy, sell}, now)
+	if len(got) != 1 {
+		t.Fatalf("две котировки возрастом менее 10 секунд с небольшим временным разрывом должны сопоставляться, получено %d", len(got))
+	}
+}
+
 func detectorQuote(exchangeName, symbol string, marketType market.MarketType, contractType market.ContractType, base, quote, bid, ask string, id int64, now time.Time) Quote {
 	bidValue, _ := decimal.NewFromString(bid)
 	askValue, _ := decimal.NewFromString(ask)
