@@ -35,7 +35,6 @@ func newDashboardTestDB(t *testing.T) *storage.DB {
 
 func TestDashboardAPIUsesLatestCompletedCycle(t *testing.T) {
 	db := newDashboardTestDB(t)
-	ctx := context.Background()
 	now := time.Now().UTC()
 
 	insertTestCycle(t, db, "older-cycle", now.Add(-10*time.Minute), now.Add(-9*time.Minute), "success")
