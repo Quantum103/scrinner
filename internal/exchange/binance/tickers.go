@@ -56,28 +56,43 @@ func (a *Adapter) collectTickersWithStats(
 		return tickers, stats, nil
 	}
 
+	type categoryResult struct {
+		tickers []price.Ticker
+		stats   TickerStats
+		err     error
+		label   string
+	}
+	enabledCategories := 0
+	results := make(chan categoryResult, 2)
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	if len(spotMarkets) > 0 {
-		spotTickers, spotStats, err := a.fetchSpotTickers(ctx, spotMarkets)
-		if err != nil {
-			return nil, stats, fmt.Errorf("получить Binance Spot tickers: %w", err)
-		}
-		tickers = append(tickers, spotTickers...)
-		stats.Received += spotStats.Received
-		stats.Valid += spotStats.Valid
-		stats.Skipped += spotStats.Skipped
+		enabledCategories++
+		go func() {
+			result, categoryStats, err := a.fetchSpotTickers(requestCtx, spotMarkets)
+			results <- categoryResult{tickers: result, stats: categoryStats, err: err, label: "Spot"}
+		}()
 	}
-
 	if len(futuresMarkets) > 0 {
-		futuresTickers, futuresStats, err := a.fetchFuturesTickers(ctx, futuresMarkets)
-		if err != nil {
-			return nil, stats, fmt.Errorf("получить Binance USD-M Futures tickers: %w", err)
-		}
-		tickers = append(tickers, futuresTickers...)
-		stats.Received += futuresStats.Received
-		stats.Valid += futuresStats.Valid
-		stats.Skipped += futuresStats.Skipped
+		enabledCategories++
+		go func() {
+			result, categoryStats, err := a.fetchFuturesTickers(requestCtx, futuresMarkets)
+			results <- categoryResult{tickers: result, stats: categoryStats, err: err, label: "USD-M Futures"}
+		}()
 	}
 
+	for i := 0; i < enabledCategories; i++ {
+		category := <-results
+		if category.err != nil {
+			cancel()
+			return nil, stats, fmt.Errorf("получить Binance %s tickers: %w", category.label, category.err)
+		}
+		tickers = append(tickers, category.tickers...)
+		stats.Received += category.stats.Received
+		stats.Valid += category.stats.Valid
+		stats.Skipped += category.stats.Skipped
+	}
 	a.logger.Info(
 		"Binance tickers fetched",
 		"received", stats.Received,
