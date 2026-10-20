@@ -46,9 +46,10 @@ jobs:
         run: |
           set -eu
           temp_dir="$(mktemp -d)"
-          helper="cmd/scanner/stage14_doctor_init_tmp.go"
-          trap 'rm -rf "$temp_dir" "$helper"' EXIT
-          cat > "$helper" <<'EOF'
+          helper_dir="cmd/stage14doctor"
+          mkdir -p "$helper_dir"
+          trap 'rm -rf "$temp_dir" "$helper_dir"' EXIT
+          cat > "$helper_dir/main.go" <<'EOF'
           package main
 
           import (
@@ -70,7 +71,7 @@ jobs:
               fmt.Fprintln(os.Stderr, err)
               os.Exit(1)
             }
-            if err := db.Migrate(ctx, "../../migrations"); err != nil {
+            if err := db.Migrate(ctx, "migrations"); err != nil {
               _ = db.Close()
               fmt.Fprintln(os.Stderr, err)
               os.Exit(1)
@@ -81,7 +82,7 @@ jobs:
             }
           }
           EOF
-          (cd cmd/scanner && go run stage14_doctor_init_tmp.go "$temp_dir/doctor.db")
+          go run ./cmd/stage14doctor "$temp_dir/doctor.db"
           go run ./cmd/scanner doctor --database "$temp_dir/doctor.db" --format json
 
       - name: Запустить go vet
