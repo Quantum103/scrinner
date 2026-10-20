@@ -5,6 +5,27 @@ import (
 	"strings"
 )
 
+// SymbolMatchesAssets проверяет, что биржевой символ выражает именно те
+// baseAsset/quoteAsset, которые вернуло API. Это защищает от контрактов с
+// масштабированным обозначением (например, 1000TOKENUSDT) под базовым активом
+// TOKEN: цена такого контракта не сопоставима с ценой одного TOKEN.
+func SymbolMatchesAssets(m Market) bool {
+	base := strings.ToUpper(strings.TrimSpace(m.BaseAsset))
+	quote := strings.ToUpper(strings.TrimSpace(m.QuoteAsset))
+	symbol := strings.ToUpper(strings.TrimSpace(m.Symbol))
+	if base == "" || quote == "" || symbol == "" {
+		return false
+	}
+
+	// OKX perpetual symbols use BASE-USDT-SWAP; SWAP is a market-type suffix,
+	// not part of the base asset.
+	if strings.HasSuffix(symbol, "-SWAP") {
+		symbol = strings.TrimSuffix(symbol, "-SWAP")
+	}
+	symbol = strings.NewReplacer("_", "", "-", "", "/", "", ".", "").Replace(symbol)
+	return symbol == base+quote
+}
+
 // AreMarketsComparable определяет, могут ли два рынка участвовать
 // в дальнейшем сравнении цен.
 //
@@ -18,6 +39,9 @@ func AreMarketsComparable(a, b Market) bool {
 
 	normalizedB, err := NormalizeMarket(b)
 	if err != nil || !normalizedB.IsSupported() {
+		return false
+	}
+	if !SymbolMatchesAssets(normalizedA) || !SymbolMatchesAssets(normalizedB) {
 		return false
 	}
 
@@ -66,6 +90,12 @@ func ValidateComparableMarkets(a, b Market) error {
 			"second market is not supported: %s",
 			normalizedB.Symbol,
 		)
+	}
+	if !SymbolMatchesAssets(normalizedA) {
+		return fmt.Errorf("first market symbol %q does not match base/quote %s/%s", normalizedA.Symbol, normalizedA.BaseAsset, normalizedA.QuoteAsset)
+	}
+	if !SymbolMatchesAssets(normalizedB) {
+		return fmt.Errorf("second market symbol %q does not match base/quote %s/%s", normalizedB.Symbol, normalizedB.BaseAsset, normalizedB.QuoteAsset)
 	}
 
 	if strings.EqualFold(normalizedA.Exchange, normalizedB.Exchange) {
