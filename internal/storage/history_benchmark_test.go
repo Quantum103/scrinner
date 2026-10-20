@@ -48,10 +48,10 @@ func BenchmarkStreamHistoricalObservations(b *testing.B) {
 	for i := range opportunities {
 		opportunities[i] = arbitrage.Opportunity{
 			Timestamp: start.Add(time.Duration(i) * time.Second),
-			Symbol: "PEPE/USDT", BaseAsset: "PEPE", QuoteAsset: "USDT",
+			Symbol:    "PEPE/USDT", BaseAsset: "PEPE", QuoteAsset: "USDT",
 			BuyMarketID: buyID, BuySymbol: buyMarket.Symbol, BuyExchange: buyMarket.Exchange,
 			BuyMarketType: market.MarketTypeSpot, BuyContractType: market.ContractTypeSpot,
-			BuyPrice: buyPrice,
+			BuyPrice:     buyPrice,
 			SellMarketID: sellID, SellSymbol: sellMarket.Symbol, SellExchange: sellMarket.Exchange,
 			SellMarketType: market.MarketTypeSpot, SellContractType: market.ContractTypeSpot,
 			SellPrice: sellPrice, SpreadPercent: decimal.NewFromInt(1),
