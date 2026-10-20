@@ -42,27 +42,43 @@ func (a *Adapter) collectTickersWithStats(
 		return tickers, stats, nil
 	}
 
+	type categoryResult struct {
+		tickers []price.Ticker
+		stats   TickerStats
+		err     error
+		label   string
+	}
+	enabledCategories := 0
+	results := make(chan categoryResult, 2)
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	if len(spotMarkets) > 0 {
-		spotTickers, spotStats, err := a.fetchTickers(ctx, "SPOT", spotMarkets)
-		if err != nil {
-			return nil, stats, fmt.Errorf("получить OKX Spot tickers: %w", err)
-		}
-		tickers = append(tickers, spotTickers...)
-		stats.Received += spotStats.Received
-		stats.Valid += spotStats.Valid
-		stats.Skipped += spotStats.Skipped
+		enabledCategories++
+		go func() {
+			result, categoryStats, err := a.fetchTickers(requestCtx, "SPOT", spotMarkets)
+			results <- categoryResult{tickers: result, stats: categoryStats, err: err, label: "Spot"}
+		}()
 	}
 	if len(swapMarkets) > 0 {
-		swapTickers, swapStats, err := a.fetchTickers(ctx, "SWAP", swapMarkets)
-		if err != nil {
-			return nil, stats, fmt.Errorf("получить OKX SWAP tickers: %w", err)
-		}
-		tickers = append(tickers, swapTickers...)
-		stats.Received += swapStats.Received
-		stats.Valid += swapStats.Valid
-		stats.Skipped += swapStats.Skipped
+		enabledCategories++
+		go func() {
+			result, categoryStats, err := a.fetchTickers(requestCtx, "SWAP", swapMarkets)
+			results <- categoryResult{tickers: result, stats: categoryStats, err: err, label: "SWAP"}
+		}()
 	}
 
+	for i := 0; i < enabledCategories; i++ {
+		category := <-results
+		if category.err != nil {
+			cancel()
+			return nil, stats, fmt.Errorf("получить OKX %s tickers: %w", category.label, category.err)
+		}
+		tickers = append(tickers, category.tickers...)
+		stats.Received += category.stats.Received
+		stats.Valid += category.stats.Valid
+		stats.Skipped += category.stats.Skipped
+	}
 	a.logger.Info(
 		"OKX tickers fetched",
 		"received", stats.Received,
