@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	DefaultAddress = "127.0.0.1:8080"
-	DefaultURL     = "http://127.0.0.1:8080"
+	DefaultAddress   = "127.0.0.1:8080"
+	DefaultURL       = "http://127.0.0.1:8080"
 	maxOpportunities = 500
 )
 
@@ -218,10 +218,10 @@ func readPayload(ctx context.Context, db *sql.DB) (Payload, error) {
 		}
 	}
 	return Payload{
-		GeneratedAt: time.Now().UTC(),
-		CurrentCycle: current,
+		GeneratedAt:          time.Now().UTC(),
+		CurrentCycle:         current,
 		LatestCompletedCycle: completed,
-		Opportunities: opportunities,
+		Opportunities:        opportunities,
 	}, nil
 }
 
