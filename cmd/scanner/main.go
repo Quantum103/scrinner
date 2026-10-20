@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/example/crypto-arbitrage-scanner/internal/config"
+	"github.com/example/crypto-arbitrage-scanner/internal/dashboard"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/binance"
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange/bitget"
@@ -97,6 +98,17 @@ func main() {
 		logger.Error("не удалось подготовить scanner", "error", err)
 		os.Exit(1)
 	}
+
+	dashboardServer, err := dashboard.Start(db, logger)
+	if err != nil {
+		logger.Error("не удалось запустить локальную панель", "url", dashboard.DefaultURL, "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := dashboardServer.Close(); err != nil {
+			logger.Warn("не удалось корректно остановить локальную панель", "error", err)
+		}
+	}()
 
 	logger.Info("scanner started", "exchanges_enabled", len(adapters),
 		"scan_interval", cfg.Scanner.Interval, "min_spread_percent", cfg.Scanner.MinSpreadPercent,
