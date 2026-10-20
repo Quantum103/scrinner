@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Арбитражный сканер — панель</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #111a2d;
+      --panel-soft: #151f35;
+      --line: #29364f;
+      --text: #eef3ff;
+      --muted: #9aa8c2;
+      --green: #58dfb0;
+      --green-bg: rgba(45, 197, 145, .12);
+      --purple: #a99aff;
+      --amber: #ffc876;
+      --red: #ff8a9a;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--bg); }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(900px 450px at 92% -8%, rgba(103, 87, 215, .17), transparent 62%),
+        radial-gradient(700px 400px at -8% 0%, rgba(53, 186, 150, .08), transparent 62%),
+        var(--bg);
+      font: 14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+    }
+    button, input, select { font: inherit; }
+    button, select, input { outline-offset: 3px; }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--purple); }
+    .shell { max-width: 1480px; margin: 0 auto; padding: 26px 30px 42px; }
+    .topbar { display:flex; justify-content:space-between; align-items:center; gap:18px; margin-bottom:34px; }
+    .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+    .brand-mark {
+      width:40px; height:40px; flex:0 0 40px; display:grid; place-items:center;
+      border:1px solid rgba(169,154,255,.45); border-radius:13px;
+      background:linear-gradient(145deg, rgba(169,154,255,.2), rgba(88,223,176,.08));
+      color:var(--green); font-weight:900; font-size:19px;
+    }
+    .brand-name { font-size:14px; font-weight:750; letter-spacing:.02em; }
+    .brand-caption { color:var(--muted); font-size:12px; margin-top:1px; }
+    .top-right { display:flex; align-items:center; gap:12px; }
+    .status-pill {
+      display:inline-flex; align-items:center; gap:8px; padding:8px 12px;
+      border:1px solid var(--line); background:rgba(17,26,45,.85);
+      border-radius:999px; color:var(--muted); white-space:nowrap; font-size:12px;
+    }
+    .dot { width:7px; height:7px; border-radius:50%; background:var(--amber); box-shadow:0 0 0 3px rgba(255,200,118,.10); }
+    .dot.success { background:var(--green); box-shadow:0 0 0 3px rgba(88,223,176,.10); }
+    .dot.error { background:var(--red); box-shadow:0 0 0 3px rgba(255,138,154,.10); }
+    .icon-button {
+      width:36px; height:36px; border:1px solid var(--line); border-radius:11px;
+      color:var(--text); background:var(--panel); display:grid; place-items:center;
+      cursor:pointer; transition:background .15s, border-color .15s;
+    }
+    .icon-button:hover { background:var(--panel-soft); border-color:#52617d; }
+    .icon-button:disabled { opacity:.5; cursor:wait; }
+    .hero { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:22px; }
+    .eyebrow { color:var(--green); text-transform:uppercase; letter-spacing:.15em; font-weight:750; font-size:10px; margin-bottom:8px; }
+    h1 { margin:0; font-size:clamp(26px,3vw,38px); line-height:1.13; letter-spacing:-.04em; font-weight:760; }
+    .hero p { margin:12px 0 0; max-width:740px; color:var(--muted); font-size:14px; }
+    .read-only { border:1px solid rgba(169,154,255,.28); background:rgba(169,154,255,.08); color:#c4baff; border-radius:11px; padding:9px 12px; white-space:nowrap; font-size:12px; }
+    .notice {
+      display:flex; align-items:flex-start; gap:12px; padding:13px 16px; margin-bottom:18px;
+      border:1px solid rgba(255,200,118,.25); background:rgba(255,200,118,.055);
+      color:#e6d3b7; border-radius:13px; font-size:12px;
+    }
+    .notice strong { color:#ffcf8c; }
+    .notice-icon { font-size:16px; line-height:1.2; }
+    .metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:18px; }
+    .metric {
+      min-width:0; padding:17px 18px; background:linear-gradient(155deg,rgba(21,31,53,.96),rgba(17,26,45,.9));
+      border:1px solid var(--line); border-radius:var(--radius);
+    }
+    .metric-label { color:var(--muted); font-size:12px; margin-bottom:10px; display:flex; align-items:center; gap:7px; }
+    .metric-value { font-size:27px; line-height:1.1; font-weight:760; letter-spacing:-.04em; font-variant-numeric:tabular-nums; }
+    .metric-foot { margin-top:9px; font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .metric-value.compact { font-size:23px; }
+    .mini-dot { width:6px; height:6px; display:inline-block; border-radius:50%; background:var(--purple); }
+    .section { background:rgba(17,26,45,.88); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; margin-bottom:18px; }
+    .section-head { padding:18px 20px 15px; display:flex; justify-content:space-between; align-items:center; gap:15px; border-bottom:1px solid rgba(41,54,79,.75); }
+    .section-title { font-size:15px; font-weight:750; letter-spacing:-.01em; }
+    .section-subtitle { color:var(--muted); font-size:12px; margin-top:3px; }
+    .how-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; }
+    .how-step { padding:17px 19px; display:flex; gap:12px; align-items:flex-start; }
+    .how-step + .how-step { border-left:1px solid var(--line); }
+    .step-number { flex:0 0 25px; width:25px; height:25px; display:grid; place-items:center; border-radius:8px; font-size:12px; font-weight:800; color:var(--green); background:var(--green-bg); }
+    .how-step strong { display:block; font-size:12px; margin-bottom:4px; }
+    .how-step p { margin:0; color:var(--muted); font-size:11px; line-height:1.55; }
+    .filters { display:grid; grid-template-columns:minmax(220px,1.65fr) repeat(4,minmax(135px,1fr)) auto; gap:10px; padding:16px 18px; border-bottom:1px solid var(--line); }
+    .control { display:flex; flex-direction:column; gap:6px; min-width:0; }
+    .control label { color:var(--muted); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; }
+    .control input, .control select {
+      width:100%; min-width:0; height:38px; border:1px solid var(--line); border-radius:10px;
+      padding:0 11px; background:#0d1527; color:var(--text); font-size:12px;
+    }
+    .control input::placeholder { color:#65738d; }
+    .filter-actions { display:flex; align-items:flex-end; }
+    .reset-button { height:38px; padding:0 13px; border:1px solid var(--line); border-radius:10px; background:transparent; color:var(--muted); cursor:pointer; white-space:nowrap; font-size:12px; }
+    .reset-button:hover { border-color:#52617d; color:var(--text); }
+    .table-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid var(--line); color:var(--muted); font-size:11px; }
+    .result-count { color:var(--text); font-weight:700; }
+    .autorefresh { display:inline-flex; align-items:center; gap:7px; }
+    .autorefresh .dot { width:5px; height:5px; box-shadow:none; }
+    .table-wrap { overflow:auto; }
+    table { width:100%; border-collapse:separate; border-spacing:0; }
+    thead th { text-align:left; padding:12px 16px; color:#8392ad; font-size:10px; text-transform:uppercase; letter-spacing:.09em; font-weight:750; background:#0e1729; white-space:nowrap; border-bottom:1px solid var(--line); }
+    tbody td { padding:15px 16px; border-bottom:1px solid rgba(41,54,79,.6); vertical-align:middle; }
+    tbody tr:last-child td { border-bottom:0; }
+    tbody tr:hover { background:rgba(169,154,255,.035); }
+    .asset { font-size:14px; font-weight:800; letter-spacing:-.015em; white-space:nowrap; }
+    .muted-line { color:var(--muted); font-size:10px; margin-top:4px; white-space:nowrap; }
+    .spread { display:inline-flex; padding:5px 8px; border-radius:8px; background:var(--green-bg); color:var(--green); font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .spread-note { font-size:10px; color:#8290a8; margin-top:5px; }
+    .venue { min-width:136px; }
+    .venue-top { display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+    .side-label { font-size:9px; letter-spacing:.08em; font-weight:850; }
+    .side-label.buy { color:var(--green); }
+    .side-label.sell { color:var(--purple); }
+    .exchange-name { font-weight:750; font-size:12px; }
+    .type-tag { font-size:9px; color:#c5baff; background:rgba(169,154,255,.1); padding:2px 6px; border-radius:5px; }
+    .pair-line { color:var(--muted); font-size:10px; margin-top:5px; }
+    .price { font-size:13px; font-weight:750; font-variant-numeric:tabular-nums; margin-top:5px; white-space:nowrap; }
+    .price-label { color:#8392ad; font-size:9px; margin-left:4px; font-weight:600; }
+    .volume { color:#8090a9; font-size:10px; margin-top:3px; white-space:nowrap; }
+    .time-cell { color:var(--muted); font-size:11px; white-space:nowrap; }
+    .time-cell strong { color:var(--text); display:block; font-variant-numeric:tabular-nums; font-size:12px; }
+    .copy-button { white-space:nowrap; padding:7px 9px; border:1px solid var(--line); border-radius:8px; color:#c6d1e6; background:rgba(21,31,53,.7); cursor:pointer; font-size:10px; }
+    .copy-button:hover { border-color:var(--purple); color:white; }
+    .empty { padding:50px 22px; text-align:center; }
+    .empty-icon { width:44px; height:44px; margin:0 auto 13px; display:grid; place-items:center; border:1px solid var(--line); background:var(--panel-soft); color:var(--purple); border-radius:15px; font-size:20px; }
+    .empty strong { display:block; font-size:14px; }
+    .empty p { color:var(--muted); max-width:480px; margin:8px auto 0; font-size:12px; }
+    .error-banner { display:none; padding:10px 14px; border:1px solid rgba(255,138,154,.35); background:rgba(255,138,154,.08); color:#ffc5ce; border-radius:11px; font-size:12px; margin-bottom:16px; white-space:pre-wrap; }
+    .footer { display:flex; justify-content:space-between; align-items:center; gap:15px; color:#71809c; font-size:11px; padding:5px 2px 0; }
+    .footer strong { color:#9aa8c2; font-weight:650; }
+    .spin { animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    @media (max-width:1160px) {
+      .filters { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .filter-actions { align-items:flex-end; }
+    }
+    @media (max-width:760px) {
+      .shell { padding:18px 12px 30px; }
+      .topbar { margin-bottom:25px; }
+      .top-right .status-pill { max-width:190px; overflow:hidden; text-overflow:ellipsis; }
+      .hero { align-items:flex-start; flex-direction:column; gap:13px; }
+      .read-only { white-space:normal; }
+      .notice { padding:12px; }
+      .metrics { gap:9px; }
+      .metric { padding:14px; }
+      .metric-value { font-size:24px; }
+      .metric-value.compact { font-size:20px; }
+      .section-head { padding:15px; }
+      .how-grid { grid-template-columns:1fr; }
+      .how-step { padding:13px 15px; }
+      .how-step + .how-step { border-left:0; border-top:1px solid var(--line); }
+      .filters { grid-template-columns:repeat(2,minmax(0,1fr)); padding:13px; }
+      .control.search { grid-column:1/-1; }
+      .table-toolbar { align-items:flex-start; flex-direction:column; padding:12px 13px; }
+      thead th, tbody td { padding:13px 12px; }
+      .footer { flex-direction:column; align-items:flex-start; }
+    }
+    @media (max-width:430px) {
+      .brand-caption { display:none; }
+      .top-right .status-pill { font-size:10px; padding:7px 9px; }
+      .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .metric-foot { white-space:normal; min-height:30px; }
+      .filters { grid-template-columns:1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">↗</div>
+        <div>
+          <div class="brand-name">ARBITRAGE SCANNER</div>
+          <div class="brand-caption">Локальная панель рыночных сигналов</div>
+        </div>
+      </div>
+      <div class="top-right">
+        <div class="status-pill" id="scanStatus" aria-live="polite"><span class="dot" id="statusDot"></span><span id="statusText">Подключаемся к сканеру…</span></div>
+        <button class="icon-button" id="refreshButton" type="button" title="Обновить данные" aria-label="Обновить данные">↻</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div>
+        <div class="eyebrow">MARKET OPPORTUNITIES · USDT</div>
+        <h1>Возможности арбитража</h1>
+        <p>Сравнение лучших цен покупки и продажи между биржами. Сначала выбери подходящий спред, затем проверь ликвидность и реальные торговые расходы.</p>
+      </div>
+      <div class="read-only">● Только мониторинг · Ордера не выставляются</div>
+    </section>
+
+    <div class="error-banner" id="errorBanner" role="alert"></div>
+
+    <div class="notice">
+      <span class="notice-icon" aria-hidden="true">ⓘ</span>
+      <div><strong>Спред — не чистая прибыль.</strong> Здесь показано расхождение цен до комиссий, проскальзывания и funding для perpetual. Сигнал может исчезнуть до входа в сделку. Не используй его без проверки объёма в стакане и доступных средств на обеих биржах.</div>
+    </div>
+
+    <section class="metrics" aria-label="Состояние сканера">
+      <article class="metric">
+        <div class="metric-label"><span class="mini-dot"></span>Сигналы в последнем цикле</div>
+        <div class="metric-value" id="metricSignals">—</div>
+        <div class="metric-foot" id="metricSignalsFoot">Ожидаем данные</div>
+      </article>
+      <article class="metric">
+        <div class="metric-label"><span class="mini-dot"></span>Биржи без ошибок</div>
+        <div class="metric-value" id="metricExchanges">—</div>
+        <div class="metric-foot" id="metricExchangesFoot">После завершения цикла</div>
+      </article>
+      <article class="metric">
+        <div class="metric-label"><span class="mini-dot"></span>Рынки / котировки</div>
+        <div class="metric-value compact" id="metricMarkets">—</div>
+        <div class="metric-foot" id="metricMarketsFoot">Обнаруженные рынки и принятые цены</div>
+      </article>
+      <article class="metric">
+        <div class="metric-label"><span class="mini-dot"></span>Последний завершённый цикл</div>
+        <div class="metric-value compact" id="metricUpdated">—</div>
+        <div class="metric-foot" id="metricUpdatedFoot">Сигналы обновляются автоматически</div>
+      </article>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <div class="section-title">Как читать сигнал</div>
+          <div class="section-subtitle">Порядок действий перед тем, как рассматривать сделку</div>
+        </div>
+      </div>
+      <div class="how-grid">
+        <div class="how-step"><span class="step-number">1</span><div><strong>Выбери строку</strong><p>Смотри на валовой спред и нужный тип рынка. Большой процент не гарантирует хорошую ликвидность.</p></div></div>
+        <div class="how-step"><span class="step-number">2</span><div><strong>Купить по Ask → продать по Bid</strong><p>Направление уже указано в строке: сначала биржа покупки, затем биржа продажи. Не меняй местами.</p></div></div>
+        <div class="how-step"><span class="step-number">3</span><div><strong>Проверь расходы и стакан</strong><p>Уточни комиссии обеих площадок, глубину стакана на своей сумме и funding, если участвует Perpetual.</p></div></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <div class="section-title">Найденные монеты</div>
+          <div class="section-subtitle" id="signalsSubtitle">Показываем сигналы последнего завершённого цикла, не всю историю</div>
+        </div>
+      </div>
+      <div class="filters" aria-label="Фильтры сигналов">
+        <div class="control search">
+          <label for="searchInput">Поиск монеты</label>
+          <input id="searchInput" type="search" placeholder="Например, BTC, ETH, SOL…" autocomplete="off">
+        </div>
+        <div class="control">
+          <label for="minSpread">Минимальный спред</label>
+          <select id="minSpread">
+            <option value="0">Все найденные</option>
+            <option value="1">От 1%</option>
+            <option value="2">От 2%</option>
+            <option value="3">От 3%</option>
+            <option value="5">От 5%</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="marketFilter">Тип рынка</label>
+          <select id="marketFilter">
+            <option value="all">Любой тип</option>
+            <option value="spot-spot">Spot ↔ Spot</option>
+            <option value="mixed">Spot ↔ Perpetual</option>
+            <option value="perp-perp">Perpetual ↔ Perpetual</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="buyExchange">Покупка на</label>
+          <select id="buyExchange">
+            <option value="all">Любая биржа</option>
+            <option value="binance">Binance</option>
+            <option value="bybit">Bybit</option>
+            <option value="mexc">MEXC</option>
+            <option value="okx">OKX</option>
+            <option value="gate">Gate.io</option>
+            <option value="bitget">Bitget</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="sellExchange">Продажа на</label>
+          <select id="sellExchange">
+            <option value="all">Любая биржа</option>
+            <option value="binance">Binance</option>
+            <option value="bybit">Bybit</option>
+            <option value="mexc">MEXC</option>
+            <option value="okx">OKX</option>
+            <option value="gate">Gate.io</option>
+            <option value="bitget">Bitget</option>
+          </select>
+        </div>
+        <div class="filter-actions">
+          <button class="reset-button" id="resetFilters" type="button">Сбросить</button>
+        </div>
+      </div>
+      <div class="table-toolbar">
+        <div><span class="result-count" id="resultCount">0 сигналов</span> <span id="filteredText">в последнем цикле</span></div>
+        <div class="autorefresh"><span class="dot success"></span><span id="refreshText">Автообновление каждые 5 секунд</span></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Монета</th>
+              <th>Валовой спред</th>
+              <th>Купить · Ask</th>
+              <th>Продать · Bid</th>
+              <th>Обнаружено</th>
+              <th>Маршрут</th>
+            </tr>
+          </thead>
+          <tbody id="opportunitiesBody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="emptyState">
+        <div class="empty-icon" aria-hidden="true">⌕</div>
+        <strong>Ожидаем первый завершённый цикл</strong>
+        <p>Как только сканер получит цены с бирж, сигналы появятся здесь. Не нужно вручную искать монеты в логах.</p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div>Источник: локальная SQLite проекта · <strong>только публичные рыночные данные</strong></div>
+      <div id="lastPoll">Подключение к локальному API…</div>
+    </footer>
+  </main>
+
+  <script>
+    const byId = (id) => document.getElementById(id);
+    const state = { data: null, fetching: false, pollTimer: null };
+    const exchangeNames = { binance: "Binance", bybit: "Bybit", mexc: "MEXC", okx: "OKX", gate: "Gate.io", bitget: "Bitget" };
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[character]);
+    }
+    function fmtNumber(value, maxDigits = 8) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return value || "—";
+      return new Intl.NumberFormat("en-US", { maximumFractionDigits: maxDigits }).format(number);
+    }
+    function fmtSpread(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + "%" : esc(value) + "%";
+    }
+    function exchangeName(value) { return exchangeNames[String(value || "").toLowerCase()] || value || "—"; }
+    function marketName(value) {
+      const normalized = String(value || "").toLowerCase();
+      return normalized === "spot" ? "Spot" : (normalized === "futures" || normalized === "perpetual" ? "Perpetual" : value || "—");
+    }
+    function parseDate(value) { return value ? new Date(value) : null; }
+    function timeAgo(value) {
+      const date = parseDate(value);
+      if (!date || Number.isNaN(date.getTime())) return "—";
+      const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+      if (seconds < 5) return "только что";
+      if (seconds < 60) return seconds + " сек. назад";
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return minutes + " мин. назад";
+      const hours = Math.floor(minutes / 60);
+      return hours + " ч. назад";
+    }
+    function timeClock(value) {
+      const date = parseDate(value);
+      if (!date || Number.isNaN(date.getTime())) return "—";
+      return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+    function statusLabel(cycle) {
+      if (!cycle) return { label: "Ожидание первого цикла", kind: "" };
+      if (!cycle.finishedAt) return { label: "Сканирование идёт", kind: "success" };
+      if (cycle.status === "success") return { label: "Сканирование работает", kind: "success" };
+      if (cycle.status === "partial") return { label: "Часть бирж не ответила", kind: "" };
+      if (cycle.status === "no_data" || cycle.status === "collection_failed") return { label: "Нет данных", kind: "error" };
+      if (cycle.status === "save_failed") return { label: "Ошибка сохранения", kind: "error" };
+      return { label: cycle.status || "Статус неизвестен", kind: "" };
+    }
+    function isSpot(value) { return String(value || "").toLowerCase() === "spot"; }
+    function matchesType(row, filter) {
+      const buySpot = isSpot(row.buyMarketType);
+      const sellSpot = isSpot(row.sellMarketType);
+      if (filter === "spot-spot") return buySpot && sellSpot;
+      if (filter === "mixed") return buySpot !== sellSpot;
+      if (filter === "perp-perp") return !buySpot && !sellSpot;
+      return true;
+    }
+    function volumeLine(value, base) {
+      if (!value) return "";
+      return '<div class="volume">Объём 24 ч.: ' + esc(fmtNumber(value, 2)) + " " + esc(base || "") + "</div>";
+    }
+    function venueCell(row, side) {
+      const buy = side === "buy";
+      const exchange = buy ? row.buyExchange : row.sellExchange;
+      const type = buy ? row.buyMarketType : row.sellMarketType;
+      const symbol = buy ? row.buySymbol : row.sellSymbol;
+      const price = buy ? row.buyPrice : row.sellPrice;
+      const volume = buy ? row.buyVolume24h : row.sellVolume24h;
+      const label = buy ? "КУПИТЬ" : "ПРОДАТЬ";
+      const priceLabel = buy ? "ASK" : "BID";
+      const colorClass = buy ? "buy" : "sell";
+      return '<div class="venue"><div class="venue-top"><span class="side-label ' + colorClass + '">' + label + '</span><span class="exchange-name">' + esc(exchangeName(exchange)) + '</span><span class="type-tag">' + esc(marketName(type)) + '</span></div><div class="pair-line">' + esc(symbol || row.symbol) + '</div><div class="price">' + esc(fmtNumber(price, 10)) + ' <span class="price-label">USDT · ' + priceLabel + '</span></div>' + volumeLine(volume, row.baseAsset) + '</div>';
+    }
+    function matchesFilters(row) {
+      const search = byId("searchInput").value.trim().toLowerCase();
+      const minimum = Number(byId("minSpread").value);
+      const buyExchange = byId("buyExchange").value;
+      const sellExchange = byId("sellExchange").value;
+      const text = [row.symbol, row.baseAsset, row.buySymbol, row.sellSymbol, row.buyExchange, row.sellExchange].join(" ").toLowerCase();
+      return (!search || text.includes(search)) &&
+        Number(row.spreadPercent) >= minimum &&
+        matchesType(row, byId("marketFilter").value) &&
+        (buyExchange === "all" || String(row.buyExchange).toLowerCase() === buyExchange) &&
+        (sellExchange === "all" || String(row.sellExchange).toLowerCase() === sellExchange);
+    }
+    function routeText(row) {
+      return row.symbol + "\nКупить: " + exchangeName(row.buyExchange) + " · " + marketName(row.buyMarketType) + " · Ask " + row.buyPrice + " USDT\nПродать: " + exchangeName(row.sellExchange) + " · " + marketName(row.sellMarketType) + " · Bid " + row.sellPrice + " USDT\nВаловой спред: " + row.spreadPercent + "%\nВНИМАНИЕ: до комиссий, проскальзывания и funding.";
+    }
+    async function copyRoute(id, button) {
+      const row = (state.data?.opportunities || []).find((item) => item.id === id);
+      if (!row) return;
+      try {
+        await navigator.clipboard.writeText(routeText(row));
+        const previous = button.textContent;
+        button.textContent = "Скопировано";
+        setTimeout(() => { button.textContent = previous; }, 1400);
+      } catch (_) {
+        byId("errorBanner").style.display = "block";
+        byId("errorBanner").textContent = "Браузер не разрешил копирование. Выдели маршрут вручную или открой панель через localhost.";
+      }
+    }
+    function renderTable() {
+      const payload = state.data;
+      const allRows = payload?.opportunities || [];
+      const rows = allRows.filter(matchesFilters);
+      const body = byId("opportunitiesBody");
+      byId("resultCount").textContent = rows.length + (rows.length === 1 ? " сигнал" : (rows.length > 1 && rows.length < 5 ? " сигнала" : " сигналов"));
+      byId("filteredText").textContent = rows.length === allRows.length ? "из " + allRows.length + " в последнем цикле" : "из " + allRows.length + " сигналов после фильтрации";
+      const html = rows.map((row) => {
+        const spreadValue = Number(row.spreadPercent);
+        const spreadClass = Number.isFinite(spreadValue) && spreadValue >= 3 ? "spread" : "spread";
+        return '<tr><td><div class="asset">' + esc(row.symbol) + '</div><div class="muted-line">' + esc(row.baseAsset) + ' / ' + esc(row.quoteAsset) + '</div></td>' +
+          '<td><span class="' + spreadClass + '">' + fmtSpread(row.spreadPercent) + '</span><div class="spread-note">до расходов</div></td>' +
+          '<td>' + venueCell(row, "buy") + '</td><td>' + venueCell(row, "sell") + '</td>' +
+          '<td class="time-cell"><strong>' + esc(timeClock(row.timestamp)) + '</strong>' + esc(timeAgo(row.timestamp)) + '</td>' +
+          '<td><button class="copy-button" type="button" data-copy-id="' + Number(row.id) + '">Копировать маршрут</button></td></tr>';
+      }).join("");
+      body.innerHTML = html;
+      body.querySelectorAll("[data-copy-id]").forEach((button) => {
+        button.addEventListener("click", () => copyRoute(Number(button.dataset.copyId), button));
+      });
+      const empty = byId("emptyState");
+      empty.style.display = rows.length ? "none" : "block";
+      if (!payload?.latestCompletedCycle) {
+        empty.querySelector("strong").textContent = "Ожидаем первый завершённый цикл";
+        empty.querySelector("p").textContent = "Как только сканер получит цены с бирж, сигналы появятся здесь. Не нужно вручную искать монеты в логах.";
+      } else if (allRows.length === 0) {
+        empty.querySelector("strong").textContent = "В последнем цикле сигналов нет";
+        empty.querySelector("p").textContent = "Это нормально: сканер сохраняет возможности, только если валовой спред достигает порога " + (payload.latestCompletedCycle.minSpreadPercent || "из конфигурации") + "%. Старые сигналы специально не показываются как текущие.";
+      } else {
+        empty.querySelector("strong").textContent = "По этим фильтрам ничего не найдено";
+        empty.querySelector("p").textContent = "Сбрось фильтры или уменьши выбранный минимальный спред. Таблица содержит сигналы последнего завершённого цикла.";
+      }
+    }
+    function renderSummary(payload) {
+      const current = payload.currentCycle;
+      const completed = payload.latestCompletedCycle;
+      const status = statusLabel(current);
+      byId("statusText").textContent = status.label;
+      byId("statusDot").className = "dot" + (status.kind ? " " + status.kind : "");
+      byId("metricSignals").textContent = completed ? (payload.opportunities || []).length : "—";
+      byId("metricSignalsFoot").textContent = completed ? "Валовой порог " + (completed.minSpreadPercent || "—") + "% · цикл " + String(completed.id).slice(-8) : "Ожидаем первый завершённый цикл";
+      byId("metricExchanges").textContent = completed ? completed.succeededExchanges + " / " + completed.enabledExchanges : "—";
+      byId("metricExchangesFoot").textContent = completed ? (completed.failedExchanges === 0 ? "Все включённые биржи ответили" : "Ошибок бирж: " + completed.failedExchanges) : "После завершения цикла";
+      byId("metricMarkets").textContent = completed ? fmtNumber(completed.marketsDiscovered, 0) + " / " + fmtNumber(completed.tickersAccepted, 0) : "—";
+      byId("metricMarketsFoot").textContent = completed ? "рынков / принятых котировок из " + fmtNumber(completed.tickersReceived, 0) : "Обнаруженные рынки и принятые цены";
+      byId("metricUpdated").textContent = completed ? timeAgo(completed.finishedAt) : "—";
+      byId("metricUpdatedFoot").textContent = completed ? "Завершён в " + timeClock(completed.finishedAt) + (completed.status === "partial" ? " · частичный цикл" : "") : "Сигналы обновляются автоматически";
+      byId("signalsSubtitle").textContent = completed
+        ? "Последний завершённый цикл: " + timeClock(completed.finishedAt) + " · автоматически обновляется каждые 5 секунд"
+        : "Ожидаем завершения первого цикла сканирования";
+      if (completed?.error) {
+        byId("errorBanner").style.display = "block";
+        byId("errorBanner").textContent = "В последнем цикле есть предупреждение: " + completed.error;
+      } else {
+        byId("errorBanner").style.display = "none";
+        byId("errorBanner").textContent = "";
+      }
+      byId("lastPoll").textContent = "Данные обновлены в " + timeClock(payload.generatedAt) + " · последний цикл завершён " + (completed ? timeAgo(completed.finishedAt) : "ещё не завершён");
+    }
+    async function loadData() {
+      if (state.fetching) return;
+      state.fetching = true;
+      const button = byId("refreshButton");
+      button.classList.add("spin");
+      button.disabled = true;
+      try {
+        const response = await fetch("/api/dashboard", { cache: "no-store", headers: { "Accept": "application/json" } });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+        state.data = payload;
+        byId("errorBanner").style.display = "none";
+        renderSummary(payload);
+        renderTable();
+        byId("refreshText").textContent = "Автообновление каждые 5 секунд";
+      } catch (error) {
+        byId("statusText").textContent = "Нет соединения с панелью";
+        byId("statusDot").className = "dot error";
+        byId("errorBanner").style.display = "block";
+        byId("errorBanner").textContent = "Не удалось обновить данные: " + error.message;
+        byId("refreshText").textContent = "Не удалось обновить данные";
+      } finally {
+        state.fetching = false;
+        button.classList.remove("spin");
+        button.disabled = false;
+      }
+    }
+    ["searchInput", "minSpread", "marketFilter", "buyExchange", "sellExchange"].forEach((id) => {
+      byId(id).addEventListener("input", renderTable);
+      byId(id).addEventListener("change", renderTable);
+    });
+    byId("resetFilters").addEventListener("click", () => {
+      byId("searchInput").value = "";
+      byId("minSpread").value = "0";
+      byId("marketFilter").value = "all";
+      byId("buyExchange").value = "all";
+      byId("sellExchange").value = "all";
+      renderTable();
+    });
+    byId("refreshButton").addEventListener("click", loadData);
+    loadData();
+    state.pollTimer = setInterval(loadData, 5000);
+  </script>
+</body>
+</html>
