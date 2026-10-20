@@ -131,6 +131,12 @@ func (d *Detector) meetsThreshold(buyAsk, sellBid decimal.Decimal) bool {
 	if !buyAsk.GreaterThan(decimal.Zero) || !sellBid.GreaterThan(buyAsk) {
 		return false
 	}
+	// Защитный предел: расхождение цены свыше 100% (цена продажи более чем вдвое
+	// выше Ask покупки) чаще означает несопоставимые единицы контракта/актива.
+	// Такие сигналы не должны попадать в таблицу как обычные арбитражные возможности.
+	if sellBid.GreaterThan(buyAsk.Mul(decimal.NewFromInt(2))) {
+		return false
+	}
 	// Сравниваем произведения точно; не округляем результат деления до проверки порога.
 	hundred := decimal.NewFromInt(100)
 	return sellBid.Mul(hundred).GreaterThanOrEqual(buyAsk.Mul(hundred.Add(d.MinSpreadPercent)))
@@ -141,7 +147,7 @@ func normalizeQuote(quote Quote, now time.Time, maxAge time.Duration) (Quote, bo
 		return Quote{}, false
 	}
 	normalized, err := market.NormalizeMarket(quote.Market)
-	if err != nil || !market.IsSupportedMarket(normalized) {
+	if err != nil || !market.IsSupportedMarket(normalized) || !market.SymbolMatchesAssets(normalized) {
 		return Quote{}, false
 	}
 	if !strings.EqualFold(strings.TrimSpace(quote.Ticker.Exchange), normalized.Exchange) ||
