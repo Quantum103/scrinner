@@ -151,6 +151,12 @@ type exchangeBatch struct {
 	err               error
 }
 
+type completedExchangeBatch struct {
+	index       int
+	batch       exchangeBatch
+	completedAt time.Time
+}
+
 // RunCycle параллельно получает котировки, сохраняет только свежие снимки и записывает историю возможностей.
 func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 	if r == nil {
@@ -226,10 +232,61 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 	}
 
 	collectionStartedAt := time.Now()
-	batches := r.collectInParallel(ctx, result.ID)
-	result.CollectionDuration = time.Since(collectionStartedAt)
-	statuses := make([]ExchangeStatus, len(batches))
-	for i, batch := range batches {
+	completedBatches := make(chan completedExchangeBatch, len(r.adapters))
+	workerLimit := r.config.MaxConcurrentExchanges
+	if workerLimit > len(r.adapters) {
+		workerLimit = len(r.adapters)
+	}
+	semaphore := make(chan struct{}, workerLimit)
+	for index, adapter := range r.adapters {
+		index, adapter := index, adapter
+		go func() {
+			started := time.Now()
+			name := ""
+			if adapter != nil {
+				name = strings.TrimSpace(adapter.Name())
+			}
+			select {
+			case semaphore <- struct{}{}:
+				batch := r.collectOne(ctx, adapter, result.ID)
+				batch.duration = time.Since(started)
+				completedBatches <- completedExchangeBatch{index: index, batch: batch, completedAt: time.Now()}
+			case <-ctx.Done():
+				completedBatches <- completedExchangeBatch{
+					index: index,
+					batch: exchangeBatch{
+						name: name, duration: time.Since(started),
+						failureStage: "cancelled", err: ctx.Err(),
+					},
+					completedAt: time.Now(),
+				}
+			}
+		}()
+	}
+
+	statuses := make([]ExchangeStatus, len(r.adapters))
+	latestQuotes := make(map[string]arbitrage.Quote)
+	detectedOpportunityKeys := make(map[string]struct{})
+	collectionFinishedAt := collectionStartedAt
+	opportunityRepo := storage.NewOpportunityRepository(r.db)
+
+	// Обрабатываем каждую биржу сразу после её ответа, не дожидаясь самой медленной.
+	// Иначе ранние REST-ответы стареют, пока собираются остальные биржи.
+	for received := 0; received < len(r.adapters); received++ {
+		completed := <-completedBatches
+		batch := completed.batch
+		i := completed.index
+		if completed.completedAt.After(collectionFinishedAt) {
+			collectionFinishedAt = completed.completedAt
+		}
+		if i < 0 || i >= len(statuses) {
+			result.PersistenceErrors++
+			if result.Error == "" {
+				result.Error = "получен результат неизвестного адаптера"
+			}
+			continue
+		}
+
 		status := ExchangeStatus{
 			Name:              batch.name,
 			Duration:          batch.duration,
@@ -250,39 +307,19 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 		if batch.metadataRefreshed {
 			result.MetadataRefreshes++
 		}
-	}
 
-	if err := ctx.Err(); err != nil {
-		for i := range statuses {
-			if statuses[i].Error == "" {
-				statuses[i].FailureStage = "cancelled"
-				statuses[i].Error = "контекст отменён до сохранения результатов цикла"
+		if ctx.Err() != nil {
+			if status.Error == "" {
+				status.FailureStage = "cancelled"
+				status.Error = ctx.Err().Error()
 			}
+			statuses[i] = status
+			continue
 		}
-		result.Exchanges = statuses
-		result.Error = err.Error()
-		finish(CycleStatusCancelled)
-		return result, errors.Join(err, cycleFinalizeErr)
-	}
-
-	quotes := make([]arbitrage.Quote, 0)
-	for i, batch := range batches {
-		if err := ctx.Err(); err != nil {
-			for j := i; j < len(statuses); j++ {
-				if statuses[j].Error == "" {
-					statuses[j].FailureStage = "cancelled"
-					statuses[j].Error = "контекст отменён до завершения обработки биржи"
-				}
-			}
-			break
-		}
-		status := statuses[i]
 		if batch.err != nil {
 			r.logger.Error("ошибка сбора биржи",
-				"cycle_id", result.ID,
-				"exchange", batch.name,
-				"stage", batch.failureStage,
-				"error", batch.err)
+				"cycle_id", result.ID, "exchange", batch.name,
+				"stage", batch.failureStage, "error", batch.err)
 			continue
 		}
 
@@ -292,17 +329,16 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 			marketByKey[marketKey(item)] = item
 		}
 		inputs := make([]storage.MarketSnapshotInput, 0, len(batch.tickers))
+		freshnessRejected := 0
+		staleExamples := make([]string, 0, 3)
 		for _, ticker := range batch.tickers {
 			if !ticker.IsFresh(now, r.config.MaxDataAge) {
 				status.TickersRejected++
 				result.TickersRejected++
-				r.logger.Warn("пропущена устаревшая или некорректная котировка",
-					"cycle_id", result.ID,
-					"exchange", batch.name,
-					"symbol", ticker.Symbol,
-					"timestamp", ticker.Timestamp,
-					"received_at", ticker.ReceivedAt,
-					"exchange_timestamp", ticker.ExchangeTimestamp)
+				freshnessRejected++
+				if len(staleExamples) < 3 {
+					staleExamples = append(staleExamples, ticker.Symbol)
+				}
 				continue
 			}
 			item, ok := marketByKey[tickerKey(ticker)]
@@ -310,10 +346,8 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 				status.TickersRejected++
 				result.TickersRejected++
 				r.logger.Warn("котировка не связана с рынком текущего ответа",
-					"cycle_id", result.ID,
-					"exchange", batch.name,
-					"symbol", ticker.Symbol,
-					"market_type", ticker.MarketType,
+					"cycle_id", result.ID, "exchange", batch.name,
+					"symbol", ticker.Symbol, "market_type", ticker.MarketType,
 					"contract_type", ticker.ContractType)
 				continue
 			}
@@ -322,12 +356,18 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 				Snapshot: storage.PriceSnapshot{
 					Timestamp: ticker.Timestamp, ReceivedAt: ticker.ReceivedAt,
 					ExchangeTimestamp: ticker.ExchangeTimestamp,
-					Bid:               ticker.Bid, Ask: ticker.Ask, Volume24h: ticker.Volume24h,
+					Bid: ticker.Bid, Ask: ticker.Ask, Volume24h: ticker.Volume24h,
 				},
 			})
 		}
 		status.TickersAccepted = len(inputs)
 		result.TickersAccepted += len(inputs)
+		if freshnessRejected > 0 {
+			r.logger.Warn("котировки пропущены по проверке свежести",
+				"cycle_id", result.ID, "exchange", batch.name,
+				"rejected", freshnessRejected, "accepted", len(inputs),
+				"max_data_age", r.config.MaxDataAge, "example_symbols", staleExamples)
+		}
 
 		saved, err := r.db.PersistMarketSnapshots(ctx, batch.markets, inputs)
 		if err != nil {
@@ -340,8 +380,18 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 			continue
 		}
 		status.SnapshotsSaved = len(saved)
-		statuses[i] = status
 		result.SnapshotsSaved += len(saved)
+
+		if len(inputs) == 0 {
+			status.FailureStage = "freshness"
+			status.Error = "биржа не предоставила свежих корректных котировок"
+			statuses[i] = status
+			r.logger.Warn("биржа не предоставила свежих корректных котировок",
+				"cycle_id", result.ID, "exchange", batch.name,
+				"markets", status.Markets, "tickers_received", status.TickersReceived,
+				"tickers_rejected", status.TickersRejected)
+			continue
+		}
 
 		for _, item := range saved {
 			ticker := price.Ticker{
@@ -352,43 +402,62 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 				Timestamp: item.Snapshot.Timestamp, ReceivedAt: item.Snapshot.ReceivedAt,
 				ExchangeTimestamp: item.Snapshot.ExchangeTimestamp,
 			}
-			quotes = append(quotes, arbitrage.Quote{
+			latestQuotes[marketKey(item.Market)] = arbitrage.Quote{
 				Market: item.Market, MarketID: item.MarketID,
 				SnapshotID: item.SnapshotID, Ticker: ticker,
-			})
+			}
 		}
+		statuses[i] = status
 		r.logger.Info("биржа обработана",
-			"cycle_id", result.ID,
-			"exchange", batch.name,
-			"markets", status.Markets,
-			"metadata_refreshed", status.MetadataRefreshed,
+			"cycle_id", result.ID, "exchange", batch.name,
+			"markets", status.Markets, "metadata_refreshed", status.MetadataRefreshed,
 			"tickers_received", status.TickersReceived,
 			"tickers_accepted", status.TickersAccepted,
 			"tickers_rejected", status.TickersRejected,
-			"snapshots_saved", status.SnapshotsSaved,
-			"duration", status.Duration)
+			"snapshots_saved", status.SnapshotsSaved, "duration", status.Duration)
+
+		detectAt := time.Now().UTC()
+		freshQuotes := make([]arbitrage.Quote, 0, len(latestQuotes))
+		for _, quote := range latestQuotes {
+			if quote.Ticker.IsFresh(detectAt, r.config.MaxDataAge) {
+				freshQuotes = append(freshQuotes, quote)
+			}
+		}
+		opportunities := r.detector.Detect(freshQuotes, detectAt)
+		newOpportunities := make([]arbitrage.Opportunity, 0, len(opportunities))
+		for _, opportunity := range opportunities {
+			key := fmt.Sprintf("%d:%d", opportunity.BuySnapshotID, opportunity.SellSnapshotID)
+			if _, exists := detectedOpportunityKeys[key]; exists {
+				continue
+			}
+			detectedOpportunityKeys[key] = struct{}{}
+			opportunity.CycleID = result.ID
+			newOpportunities = append(newOpportunities, opportunity)
+		}
+		if len(newOpportunities) > 0 {
+			result.OpportunitiesDetected += len(newOpportunities)
+			if err := opportunityRepo.InsertOpportunities(ctx, newOpportunities); err != nil {
+				result.PersistenceErrors++
+				message := fmt.Sprintf("сохранить найденные возможности: %v", err)
+				if result.Error == "" {
+					result.Error = message
+				} else {
+					result.Error += "; " + message
+				}
+				r.logger.Error("ошибка сохранения возможностей",
+					"cycle_id", result.ID, "count", len(newOpportunities), "error", err)
+			} else {
+				result.OpportunitiesSaved += len(newOpportunities)
+			}
+		}
 	}
+	result.CollectionDuration = collectionFinishedAt.Sub(collectionStartedAt)
 	result.Exchanges = statuses
 
 	if err := ctx.Err(); err != nil {
 		result.Error = err.Error()
 		finish(CycleStatusCancelled)
 		return result, errors.Join(err, cycleFinalizeErr)
-	}
-
-	opportunities := r.detector.Detect(quotes, time.Now().UTC())
-	result.OpportunitiesDetected = len(opportunities)
-	if len(opportunities) > 0 {
-		for i := range opportunities {
-			opportunities[i].CycleID = result.ID
-		}
-		if err := storage.NewOpportunityRepository(r.db).InsertOpportunities(ctx, opportunities); err != nil {
-			result.Error = fmt.Sprintf("сохранить найденные возможности: %v", err)
-			result.PersistenceErrors++
-			finish(CycleStatusSaveFailed)
-			return result, errors.Join(fmt.Errorf("сохранить найденные возможности: %w", err), cycleFinalizeErr)
-		}
-		result.OpportunitiesSaved = len(opportunities)
 	}
 
 	failed := 0
