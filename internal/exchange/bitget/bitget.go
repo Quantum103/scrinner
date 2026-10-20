@@ -141,25 +141,43 @@ func (a *Adapter) CollectTickersWithStats(ctx context.Context, markets []market.
 	if len(spotMarkets) == 0 && len(futuresMarkets) == 0 {
 		return result, stats, nil
 	}
+
+	type categoryResult struct {
+		tickers []price.Ticker
+		stats   TickerStats
+		err     error
+		label   string
+	}
+	enabledCategories := 0
+	results := make(chan categoryResult, 2)
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	if len(spotMarkets) > 0 {
-		tickers, tickStats, err := a.fetchTickers(ctx, spotCategory, spotMarkets, market.MarketTypeSpot, market.ContractTypeSpot)
-		if err != nil {
-			return nil, stats, err
-		}
-		result = append(result, tickers...)
-		stats.Received += tickStats.Received
-		stats.Valid += tickStats.Valid
-		stats.Skipped += tickStats.Skipped
+		enabledCategories++
+		go func() {
+			tickers, tickStats, err := a.fetchTickers(requestCtx, spotCategory, spotMarkets, market.MarketTypeSpot, market.ContractTypeSpot)
+			results <- categoryResult{tickers: tickers, stats: tickStats, err: err, label: "Spot"}
+		}()
 	}
 	if len(futuresMarkets) > 0 {
-		tickers, tickStats, err := a.fetchTickers(ctx, futuresCategory, futuresMarkets, market.MarketTypeFutures, market.ContractTypePerpetual)
-		if err != nil {
-			return nil, stats, err
+		enabledCategories++
+		go func() {
+			tickers, tickStats, err := a.fetchTickers(requestCtx, futuresCategory, futuresMarkets, market.MarketTypeFutures, market.ContractTypePerpetual)
+			results <- categoryResult{tickers: tickers, stats: tickStats, err: err, label: "USDT Perpetual"}
+		}()
+	}
+
+	for i := 0; i < enabledCategories; i++ {
+		category := <-results
+		if category.err != nil {
+			cancel()
+			return nil, stats, fmt.Errorf("получить Bitget %s tickers: %w", category.label, category.err)
 		}
-		result = append(result, tickers...)
-		stats.Received += tickStats.Received
-		stats.Valid += tickStats.Valid
-		stats.Skipped += tickStats.Skipped
+		result = append(result, category.tickers...)
+		stats.Received += category.stats.Received
+		stats.Valid += category.stats.Valid
+		stats.Skipped += category.stats.Skipped
 	}
 	a.logger.Info("котировки Bitget обработаны", "received", stats.Received, "valid", stats.Valid, "skipped", stats.Skipped)
 	return result, stats, nil
