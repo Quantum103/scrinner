@@ -82,6 +82,37 @@ func TestDetectorUsesAskToBuyBidToSellAndConsidersReverseDirectionIndependently(
 	}
 }
 
+func TestDetectorRejectsExtremePriceScaleMismatch(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	detector, err := NewDetector(decimal.NewFromInt(1), 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	buy := detectorQuote("gate", "TOKENUSDT", market.MarketTypeSpot, market.ContractTypeSpot, "TOKEN", "USDT", "0.0006", "0.0007", 10, now)
+	sell := detectorQuote("bybit", "TOKENUSDT", market.MarketTypeFutures, market.ContractTypePerpetual, "TOKEN", "USDT", "772", "773", 11, now)
+	if got := detector.Detect([]Quote{buy, sell}, now); len(got) != 0 {
+		t.Fatalf("extreme price-scale mismatch must not become an arbitrage signal: %#v", got)
+	}
+}
+
+func TestDetectorRejectsSymbolWhoseScaleDoesNotMatchBaseAsset(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	detector, err := NewDetector(decimal.NewFromInt(1), 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buy := detectorQuote("gate", "TOKENUSDT", market.MarketTypeSpot, market.ContractTypeSpot, "TOKEN", "USDT", "0.0006", "0.0007", 20, now)
+	sell := detectorQuote("bybit", "1000000TOKENUSDT", market.MarketTypeFutures, market.ContractTypePerpetual, "TOKEN", "USDT", "772", "773", 21, now)
+	if got := detector.Detect([]Quote{buy, sell}, now); len(got) != 0 {
+		t.Fatalf("scaled contract symbol must not be compared with the unscaled base asset: %#v", got)
+	}
+}
+
 func TestDetectorThresholdUsesExactDecimalComparison(t *testing.T) {
 	now := time.Now().UTC()
 	detector, _ := NewDetector(decimal.NewFromInt(1), 10*time.Second)
