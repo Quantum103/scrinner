@@ -44,8 +44,6 @@ jobs:
 
       - name: Проверить план запроса исторической статистики SQLite
         run: go test -v -run '^TestHistoricalObservationQueryPlan
-
-      - name: Подготовить временную SQLite для локальной диагностики
         run: |
           set -eu
           temp_dir="$(mktemp -d)"
