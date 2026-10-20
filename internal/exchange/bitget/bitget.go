@@ -3,6 +3,7 @@ package bitget
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 
