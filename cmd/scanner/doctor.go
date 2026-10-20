@@ -31,7 +31,7 @@ type doctorReport struct {
 	OK                 bool             `json:"ok"`
 	Checks             []doctorCheck    `json:"checks"`
 	Warnings           []string         `json:"warnings,omitempty"`
-	SupportedExchanges []string        `json:"supported_exchanges"`
+	SupportedExchanges []string         `json:"supported_exchanges"`
 	EnabledAdapters    []string         `json:"enabled_adapters"`
 	Database           map[string]int64 `json:"database_table_counts,omitempty"`
 }
