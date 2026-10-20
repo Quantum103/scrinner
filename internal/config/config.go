@@ -4,7 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"os"
+	"sort"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -16,6 +19,7 @@ type Config struct {
 	Exchanges ExchangesConfig `yaml:"exchanges"`
 	Database  DatabaseConfig  `yaml:"database"`
 	Stats     StatsConfig     `yaml:"stats"`
+	Warnings  []string        `yaml:"-"`
 }
 
 // ScannerConfig содержит настройки времени работы scanner.
@@ -86,6 +90,13 @@ func Load(path string) (Config, error) {
 			err,
 		)
 	}
+	if err := validateRequiredFields(data); err != nil {
+		return Config{}, err
+	}
+	cfg.Warnings = unknownYAMLFields(data)
+	if unknown := unknownEnabledExchanges(data); len(unknown) > 0 {
+		return Config{}, fmt.Errorf("exchanges.%s.enabled: нет поддерживаемого адаптера; доступны только Binance, Bybit, MEXC, OKX, Gate и Bitget", strings.Join(unknown, ", "))
+	}
 
 	if err := cfg.parseDurations(); err != nil {
 		return Config{}, err
@@ -100,6 +111,152 @@ func Load(path string) (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// validateRequiredFields проверяет наличие параметров, значения по умолчанию для которых опасны.
+func validateRequiredFields(data []byte) error {
+	var raw struct {
+		Scanner  map[string]any `yaml:"scanner"`
+		Database map[string]any `yaml:"database"`
+	}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("проверить обязательные поля конфигурации: %w", err)
+	}
+
+	required := []struct {
+		path   string
+		values map[string]any
+		key    string
+	}{
+		{path: "scanner.interval", values: raw.Scanner, key: "interval"},
+		{path: "scanner.min_spread_percent", values: raw.Scanner, key: "min_spread_percent"},
+		{path: "scanner.max_data_age", values: raw.Scanner, key: "max_data_age"},
+		{path: "database.path", values: raw.Database, key: "path"},
+	}
+	for _, field := range required {
+		value, exists := field.values[field.key]
+		if !exists || value == nil {
+			return fmt.Errorf("%s обязателен и не может быть null", field.path)
+		}
+	}
+	return nil
+}
+
+// unknownYAMLFields находит неизвестные ключи для диагностики, не блокируя старые конфигурации.
+func unknownYAMLFields(data []byte) []string {
+	var document yaml.Node
+	if err := yaml.Unmarshal(data, &document); err != nil || len(document.Content) == 0 {
+		return nil
+	}
+	root := document.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+
+	rootFields := map[string]bool{
+		"scanner": true, "exchanges": true, "database": true, "stats": true,
+	}
+	sectionFields := map[string]map[string]bool{
+		"scanner":  {"interval": true, "min_spread_percent": true, "max_data_age": true},
+		"database": {"path": true},
+		"stats":    {"timezone": true, "max_observation_gap": true},
+	}
+	exchangeFields := map[string]map[string]bool{
+		"binance": {"enabled": true},
+		"bybit":   {"enabled": true},
+		"mexc":    {"enabled": true},
+		"okx":     {"enabled": true, "base_url": true},
+		"gate":    {"enabled": true, "base_url": true},
+		"bitget":  {"enabled": true},
+	}
+
+	var warnings []string
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		section := root.Content[i].Value
+		value := root.Content[i+1]
+		if !rootFields[section] {
+			warnings = append(warnings, section)
+			continue
+		}
+		if section == "exchanges" {
+			if value.Kind != yaml.MappingNode {
+				continue
+			}
+			for j := 0; j+1 < len(value.Content); j += 2 {
+				exchangeName := value.Content[j].Value
+				exchangeNode := value.Content[j+1]
+				fields, known := exchangeFields[exchangeName]
+				if !known {
+					warnings = append(warnings, "exchanges."+exchangeName)
+					continue
+				}
+				if exchangeNode.Kind != yaml.MappingNode {
+					continue
+				}
+				for k := 0; k+1 < len(exchangeNode.Content); k += 2 {
+					fieldName := exchangeNode.Content[k].Value
+					if !fields[fieldName] {
+						warnings = append(warnings, "exchanges."+exchangeName+"."+fieldName)
+					}
+				}
+			}
+			continue
+		}
+		if value.Kind != yaml.MappingNode {
+			continue
+		}
+		fields := sectionFields[section]
+		for j := 0; j+1 < len(value.Content); j += 2 {
+			fieldName := value.Content[j].Value
+			if !fields[fieldName] {
+				warnings = append(warnings, section+"."+fieldName)
+			}
+		}
+	}
+	sort.Strings(warnings)
+	return warnings
+}
+
+// unknownEnabledExchanges обнаруживает неизвестные биржи, явно включённые в YAML.
+func unknownEnabledExchanges(data []byte) []string {
+	var document yaml.Node
+	if err := yaml.Unmarshal(data, &document); err != nil || len(document.Content) == 0 {
+		return nil
+	}
+	root := document.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	known := map[string]bool{
+		"binance": true, "bybit": true, "mexc": true,
+		"okx": true, "gate": true, "bitget": true,
+	}
+	var exchanges *yaml.Node
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == "exchanges" {
+			exchanges = root.Content[i+1]
+			break
+		}
+	}
+	if exchanges == nil || exchanges.Kind != yaml.MappingNode {
+		return nil
+	}
+	var result []string
+	for i := 0; i+1 < len(exchanges.Content); i += 2 {
+		name := exchanges.Content[i].Value
+		value := exchanges.Content[i+1]
+		if known[name] || value.Kind != yaml.MappingNode {
+			continue
+		}
+		for j := 0; j+1 < len(value.Content); j += 2 {
+			if value.Content[j].Value == "enabled" && strings.EqualFold(strings.TrimSpace(value.Content[j+1].Value), "true") {
+				result = append(result, name)
+				break
+			}
+		}
+	}
+	sort.Strings(result)
+	return result
 }
 
 // parseDurations преобразует строковые интервалы YAML в time.Duration.
@@ -185,6 +342,12 @@ func (c *Config) parseStats() error {
 
 // Validate проверяет значения конфигурации.
 func (c Config) Validate() error {
+	if c.Scanner.Interval < time.Second {
+		return errors.New("scanner.interval должен быть не меньше 1s")
+	}
+	if c.Scanner.MaxDataAge <= 0 {
+		return errors.New("scanner.max_data_age должен быть больше нуля")
+	}
 	if math.IsNaN(c.Scanner.MinSpreadPercent) || math.IsInf(c.Scanner.MinSpreadPercent, 0) {
 		return errors.New(
 			"scanner.min_spread_percent должен быть конечным числом",
@@ -196,11 +359,30 @@ func (c Config) Validate() error {
 		)
 	}
 
-	if c.Database.Path == "" {
-		return errors.New(
-			"database.path обязателен",
-		)
+	if strings.TrimSpace(c.Database.Path) == "" {
+		return errors.New("database.path обязателен и не может быть пустым")
 	}
+	if err := validateOptionalBaseURL("exchanges.okx.base_url", c.Exchanges.OKX.BaseURL); err != nil {
+		return err
+	}
+	if err := validateOptionalBaseURL("exchanges.gate.base_url", c.Exchanges.Gate.BaseURL); err != nil {
+		return err
+	}
+	return nil
+}
 
+// validateOptionalBaseURL проверяет настраиваемый URL, не печатая потенциальные учётные данные.
+func validateOptionalBaseURL(field, raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed == nil || parsed.Hostname() == "" ||
+		(parsed.Scheme != "http" && parsed.Scheme != "https") ||
+		parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" ||
+		(parsed.Path != "" && parsed.Path != "/") {
+		return fmt.Errorf("%s должен быть абсолютным HTTP(S) URL без учётных данных, пути, query и fragment", field)
+	}
 	return nil
 }

@@ -40,12 +40,14 @@ func main() {
 			err = runDBCheckCommand(os.Args[2:], os.Stdout, os.Stderr)
 		case "backup-check":
 			err = runBackupCheckCommand(os.Args[2:], os.Stdout, os.Stderr)
+		case "doctor":
+			err = runDoctorCommand(os.Args[2:], os.Stdout, os.Stderr)
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[1], err)
 			os.Exit(2)
 		}
-		if os.Args[1] == "stats" || os.Args[1] == "backup" || os.Args[1] == "db-check" || os.Args[1] == "backup-check" {
+		if os.Args[1] == "stats" || os.Args[1] == "backup" || os.Args[1] == "db-check" || os.Args[1] == "backup-check" || os.Args[1] == "doctor" {
 			return
 		}
 	}
@@ -57,6 +59,9 @@ func main() {
 	if err != nil {
 		logger.Error("failed to load configuration", "error", err, "path", defaultConfigPath)
 		os.Exit(1)
+	}
+	for _, warning := range cfg.Warnings {
+		logger.Warn("неизвестное поле конфигурации; значение не применено", "field", warning)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

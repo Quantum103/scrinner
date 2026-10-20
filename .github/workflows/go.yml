@@ -29,8 +29,8 @@ jobs:
 
       - name: Проверить форматирование изменённых Go-файлов и storage-тестов Stage 10
         run: |
-          gofmt -d cmd/scanner/*.go internal/arbitrage/*.go internal/config/*.go internal/storage/opportunities.go internal/exchange/bybit/tickers.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/bitget/*.go internal/price/snapshot.go internal/price/snapshot_test.go internal/scanner/*.go internal/statistics/*.go internal/storage/history.go internal/storage/history_test.go internal/storage/maintenance.go internal/storage/maintenance_test.go internal/storage/cycle.go internal/storage/cycle_test.go internal/storage/opportunities.go internal/storage/prices.go internal/storage/sqlite.go
-          unformatted="$(gofmt -l cmd/scanner/*.go internal/arbitrage/*.go internal/config/*.go internal/storage/opportunities.go internal/exchange/bybit/tickers.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/bitget/*.go internal/price/snapshot.go internal/price/snapshot_test.go internal/scanner/*.go internal/statistics/*.go internal/storage/history.go internal/storage/history_test.go internal/storage/maintenance.go internal/storage/maintenance_test.go internal/storage/cycle.go internal/storage/cycle_test.go internal/storage/opportunities.go internal/storage/prices.go)"
+          gofmt -d cmd/scanner/*.go internal/arbitrage/*.go internal/market/normalizer_benchmark_test.go internal/config/*.go internal/storage/opportunities.go internal/exchange/bybit/tickers.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/bitget/*.go internal/price/snapshot.go internal/price/snapshot_test.go internal/scanner/*.go internal/statistics/*.go internal/storage/history.go internal/storage/history_test.go internal/storage/history_benchmark_test.go internal/storage/maintenance.go internal/storage/maintenance_test.go internal/storage/cycle.go internal/storage/cycle_test.go internal/storage/opportunities.go internal/storage/prices.go internal/storage/sqlite.go
+          unformatted="$(gofmt -l cmd/scanner/*.go internal/arbitrage/*.go internal/market/normalizer_benchmark_test.go internal/config/*.go internal/storage/opportunities.go internal/exchange/bybit/tickers.go internal/exchange/mexc/*.go internal/exchange/okx/*.go internal/exchange/gate/*.go internal/exchange/bitget/*.go internal/price/snapshot.go internal/price/snapshot_test.go internal/scanner/*.go internal/statistics/*.go internal/storage/history.go internal/storage/history_test.go internal/storage/history_benchmark_test.go internal/storage/maintenance.go internal/storage/maintenance_test.go internal/storage/cycle.go internal/storage/cycle_test.go internal/storage/opportunities.go internal/storage/prices.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
             exit 1
@@ -38,6 +38,55 @@ jobs:
 
       - name: Запустить unit-тесты
         run: go test ./...
+
+      - name: Запустить детерминированные бенчмарки
+        run: go test -bench=. -benchmem ./...
+
+      - name: Проверить план запроса исторической статистики SQLite
+        run: go test -v -run '^TestHistoricalObservationQueryPlan$' ./internal/storage
+
+      - name: Подготовить временную SQLite для локальной диагностики
+        run: |
+          set -eu
+          temp_dir="$(mktemp -d)"
+          helper_dir="cmd/stage14doctor"
+          mkdir -p "$helper_dir"
+          trap 'rm -rf "$temp_dir" "$helper_dir"' EXIT
+          cat > "$helper_dir/main.go" <<'EOF'
+          package main
+
+          import (
+            "context"
+            "fmt"
+            "os"
+
+            "github.com/example/crypto-arbitrage-scanner/internal/storage"
+          )
+
+          func main() {
+            if len(os.Args) != 2 {
+              fmt.Fprintln(os.Stderr, "ожидается путь к временной SQLite")
+              os.Exit(2)
+            }
+            ctx := context.Background()
+            db, err := storage.Open(ctx, os.Args[1])
+            if err != nil {
+              fmt.Fprintln(os.Stderr, err)
+              os.Exit(1)
+            }
+            if err := db.Migrate(ctx, "migrations"); err != nil {
+              _ = db.Close()
+              fmt.Fprintln(os.Stderr, err)
+              os.Exit(1)
+            }
+            if err := db.Close(); err != nil {
+              fmt.Fprintln(os.Stderr, err)
+              os.Exit(1)
+            }
+          }
+          EOF
+          go run ./cmd/stage14doctor "$temp_dir/doctor.db"
+          go run ./cmd/scanner doctor --database "$temp_dir/doctor.db" --format json
 
       - name: Запустить go vet
         run: go vet ./...
