@@ -641,6 +641,13 @@ func (r *Runner) marketsFor(ctx context.Context, adapter exchange.Exchange, name
 				"market_type", normalized.MarketType, "contract_type", normalized.ContractType)
 			continue
 		}
+		if !market.SymbolMatchesAssets(normalized) {
+			r.logger.Warn("рынок пропущен: символ не соответствует base/quote; возможен контракт с другой единицей цены",
+				"cycle_id", cycleID, "exchange", name, "symbol", normalized.Symbol,
+				"base_asset", normalized.BaseAsset, "quote_asset", normalized.QuoteAsset,
+				"market_type", normalized.MarketType, "contract_type", normalized.ContractType)
+			continue
+		}
 		key := marketKey(normalized)
 		if _, duplicate := seen[key]; duplicate {
 			r.logger.Warn("дублирующиеся метаданные рынка пропущены",
