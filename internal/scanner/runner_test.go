@@ -197,7 +197,7 @@ func TestRunnerPersistsFastExchangeBeforeSlowExchangeFinishes(t *testing.T) {
 	adapters := []exchange.Exchange{
 		&fakeExchange{
 			name: "binance", markets: []market.Market{fastMarket},
-			tickers: []price.Ticker{fakeTicker(fastMarket, "9", "10", now)},
+			tickers: []price.Ticker{fakeTicker(fastMarket, "9", "10", now.Add(time.Second))},
 		},
 		&delayedFailureExchange{
 			fakeExchange: fakeExchange{
