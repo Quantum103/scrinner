@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -228,43 +229,83 @@ func (a *Adapter) fetchSpotVolumes(
 		symbols = append(symbols, symbol)
 	}
 
-	volumes := make(map[string]*decimal.Decimal, len(symbols))
+	sort.Strings(symbols)
+	chunks := make([][]string, 0, (len(symbols)+maxSpotSymbols-1)/maxSpotSymbols)
 	for start := 0; start < len(symbols); start += maxSpotSymbols {
 		end := start + maxSpotSymbols
 		if end > len(symbols) {
 			end = len(symbols)
 		}
-		encoded, err := json.Marshal(symbols[start:end])
-		if err != nil {
-			return nil, fmt.Errorf("сформировать список Binance Spot symbols: %w", err)
-		}
+		chunks = append(chunks, append([]string(nil), symbols[start:end]...))
+	}
 
-		query := url.Values{}
-		query.Set("symbols", string(encoded))
-		var response []spot24hrTicker
-		if _, err := a.client.getJSON(
-			ctx,
-			false,
-			"получить Spot статистику за 24 часа",
-			spot24hrTickerEndpoint,
-			query,
-			&response,
-		); err != nil {
-			return nil, err
-		}
-		if response == nil {
-			return nil, fmt.Errorf("Binance Spot ticker/24hr: ожидался JSON-массив")
-		}
+	type chunkResult struct {
+		volumes map[string]*decimal.Decimal
+		err     error
+	}
+	results := make(chan chunkResult, len(chunks))
+	semaphore := make(chan struct{}, 3)
+	for _, chunk := range chunks {
+		chunk := chunk
+		go func() {
+			select {
+			case semaphore <- struct{}{}:
+				defer func() { <-semaphore }()
+			case <-ctx.Done():
+				results <- chunkResult{err: ctx.Err()}
+				return
+			}
 
-		for _, item := range response {
-			symbol := strings.ToUpper(strings.TrimSpace(item.Symbol))
-			if symbol == "" {
-				continue
+			encoded, err := json.Marshal(chunk)
+			if err != nil {
+				results <- chunkResult{err: fmt.Errorf("сформировать список Binance Spot symbols: %w", err)}
+				return
 			}
-			if value := parseVolume(item.Volume); value != nil {
-				volumes[symbol] = value
+			query := url.Values{}
+			query.Set("symbols", string(encoded))
+			var response []spot24hrTicker
+			if _, err := a.client.getJSON(
+				ctx, false, "получить Spot статистику за 24 часа",
+				spot24hrTickerEndpoint, query, &response,
+			); err != nil {
+				results <- chunkResult{err: err}
+				return
 			}
+			if response == nil {
+				results <- chunkResult{err: fmt.Errorf("Binance Spot ticker/24hr: ожидался JSON-массив")}
+				return
+			}
+
+			volumes := make(map[string]*decimal.Decimal, len(response))
+			for _, item := range response {
+				symbol := strings.ToUpper(strings.TrimSpace(item.Symbol))
+				if symbol == "" {
+					continue
+				}
+				if value := parseVolume(item.Volume); value != nil {
+					volumes[symbol] = value
+				}
+			}
+			results <- chunkResult{volumes: volumes}
+		}()
+	}
+
+	volumes := make(map[string]*decimal.Decimal, len(symbols))
+	var firstErr error
+	for range len(chunks) {
+		result := <-results
+		if result.err != nil {
+			if firstErr == nil {
+				firstErr = result.err
+			}
+			continue
 		}
+		for symbol, volume := range result.volumes {
+			volumes[symbol] = volume
+		}
+	}
+	if firstErr != nil {
+		return nil, firstErr
 	}
 	return volumes, nil
 }
