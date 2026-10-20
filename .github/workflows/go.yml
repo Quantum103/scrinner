@@ -70,7 +70,7 @@ jobs:
               fmt.Fprintln(os.Stderr, err)
               os.Exit(1)
             }
-            if err := db.Migrate(ctx, "migrations"); err != nil {
+            if err := db.Migrate(ctx, "../../migrations"); err != nil {
               _ = db.Close()
               fmt.Fprintln(os.Stderr, err)
               os.Exit(1)
@@ -81,7 +81,7 @@ jobs:
             }
           }
           EOF
-          go run "$helper" "$temp_dir/doctor.db"
+          (cd cmd/scanner && go run stage14_doctor_init_tmp.go "$temp_dir/doctor.db")
           go run ./cmd/scanner doctor --database "$temp_dir/doctor.db" --format json
 
       - name: Запустить go vet
