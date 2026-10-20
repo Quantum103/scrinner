@@ -107,7 +107,7 @@ func (d *Detector) Detect(quotes []Quote, now time.Time) []Opportunity {
 				if strings.EqualFold(first.Market.Exchange, second.Market.Exchange) {
 					continue
 				}
-				if !quoteTimesCompatible(first.Ticker, second.Ticker, now, d.MaxQuoteSkew) {
+				if !quoteTimesCompatible(first.Ticker, second.Ticker, now, d.MaxDataAge, d.MaxQuoteSkew) {
 					continue
 				}
 
@@ -161,13 +161,13 @@ func normalizeQuote(quote Quote, now time.Time, maxAge time.Duration) (Quote, bo
 	return quote, true
 }
 
-func quoteTimesCompatible(first, second price.Ticker, now time.Time, maxSkew time.Duration) bool {
+func quoteTimesCompatible(first, second price.Ticker, now time.Time, maxAge, maxSkew time.Duration) bool {
 	firstTime := first.ObservationTime()
 	secondTime := second.ObservationTime()
-	if firstTime.IsZero() || secondTime.IsZero() || maxSkew <= 0 {
+	if firstTime.IsZero() || secondTime.IsZero() || maxAge <= 0 || maxSkew <= 0 {
 		return false
 	}
-	if !timestampWithinRange(firstTime, now, maxSkew) || !timestampWithinRange(secondTime, now, maxSkew) {
+	if !timestampWithinRange(firstTime, now, maxAge) || !timestampWithinRange(secondTime, now, maxAge) {
 		return false
 	}
 	delta := firstTime.Sub(secondTime)
