@@ -39,6 +39,9 @@ jobs:
       - name: Запустить unit-тесты
         run: go test ./...
 
+      - name: Проверить гонки данных
+        run: go test -race ./...
+
       - name: Запустить детерминированные бенчмарки
         run: go test -bench=. -benchmem ./...
 
