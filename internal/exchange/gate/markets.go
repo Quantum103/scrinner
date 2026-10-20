@@ -47,11 +47,6 @@ func (a *Adapter) discoverMarkets(ctx context.Context) ([]market.Market, error) 
 	seen := make(map[string]struct{}, len(markets))
 	spotCount, perpetualCount := 0, 0
 
-	a.mu.Lock()
-	a.spotTickerCache = append([]spotTicker(nil), spotTickerResponse...)
-	a.spotTickerReceivedAt = spotTickerReceivedAt
-	a.hasSpotTickerCache = true
-	a.mu.Unlock()
 
 	for _, pair := range spotPairs {
 		if !strings.EqualFold(strings.TrimSpace(pair.Quote), usdtAsset) {
