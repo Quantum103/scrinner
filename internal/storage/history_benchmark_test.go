@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -119,5 +118,4 @@ func TestHistoricalObservationQueryPlan(t *testing.T) {
 		t.Fatal("SQLite не вернул план исторического запроса")
 	}
 	t.Logf("EXPLAIN QUERY PLAN: %s", strings.Join(details, " | "))
-	_ = fmt.Sprintf("%d", len(details))
 }
