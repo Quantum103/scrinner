@@ -356,7 +356,7 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 				Snapshot: storage.PriceSnapshot{
 					Timestamp: ticker.Timestamp, ReceivedAt: ticker.ReceivedAt,
 					ExchangeTimestamp: ticker.ExchangeTimestamp,
-					Bid: ticker.Bid, Ask: ticker.Ask, Volume24h: ticker.Volume24h,
+					Bid:               ticker.Bid, Ask: ticker.Ask, Volume24h: ticker.Volume24h,
 				},
 			})
 		}
