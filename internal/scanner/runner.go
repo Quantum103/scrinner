@@ -191,6 +191,7 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 		return result, fmt.Errorf("зарегистрировать начало цикла сканирования: %w", err)
 	}
 	var cycleFinalizeErr error
+	var opportunityPersistenceErr error
 	finish := func(status string) {
 		result.Status = status
 		result.FinishedAt = time.Now().UTC()
@@ -250,6 +251,7 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 			case semaphore <- struct{}{}:
 				batch := r.collectOne(ctx, adapter, result.ID)
 				batch.duration = time.Since(started)
+				<-semaphore
 				completedBatches <- completedExchangeBatch{index: index, batch: batch, completedAt: time.Now()}
 			case <-ctx.Done():
 				completedBatches <- completedExchangeBatch{
@@ -438,7 +440,8 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 			result.OpportunitiesDetected += len(newOpportunities)
 			if err := opportunityRepo.InsertOpportunities(ctx, newOpportunities); err != nil {
 				result.PersistenceErrors++
-				message := fmt.Sprintf("сохранить найденные возможности: %v", err)
+				opportunityPersistenceErr = fmt.Errorf("сохранить найденные возможности: %w", err)
+				message := opportunityPersistenceErr.Error()
 				if result.Error == "" {
 					result.Error = message
 				} else {
@@ -481,7 +484,7 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 	default:
 		finish(CycleStatusSuccess)
 	}
-	return result, cycleFinalizeErr
+	return result, errors.Join(opportunityPersistenceErr, cycleFinalizeErr)
 }
 
 // logCycle выводит сводку цикла без перечисления всех тикеров.
