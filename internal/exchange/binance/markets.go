@@ -12,12 +12,19 @@ import (
 // discoverMarkets получает только активные Spot USDT и USDⓈ-M USDT Perpetual.
 func (a *Adapter) discoverMarkets(ctx context.Context) ([]market.Market, error) {
 	var spotResponse spotExchangeInfoResponse
+
+	// Уменьшаем ответ exchangeInfo: сканеру нужны только активные Spot-инструменты.
+	spotQuery := url.Values{}
+	spotQuery.Set("permissions", "SPOT")
+	spotQuery.Set("symbolStatus", tradingStatus)
+	spotQuery.Set("showPermissionSets", "false")
+
 	if _, err := a.client.getJSON(
 		ctx,
 		false,
 		"получить список Spot инструментов",
 		spotExchangeInfoEndpoint,
-		url.Values{},
+		spotQuery,
 		&spotResponse,
 	); err != nil {
 		return nil, fmt.Errorf("получить Binance Spot exchangeInfo: %w", err)
