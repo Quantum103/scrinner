@@ -16,6 +16,16 @@ func TestDiscoverMarketsFiltersSpotAndUSDMPerpetual(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case spotExchangeInfoEndpoint:
+			query := r.URL.Query()
+			if got := query.Get("permissions"); got != "SPOT" {
+				t.Errorf("permissions = %q, want SPOT", got)
+			}
+			if got := query.Get("symbolStatus"); got != tradingStatus {
+				t.Errorf("symbolStatus = %q, want %q", got, tradingStatus)
+			}
+			if got := query.Get("showPermissionSets"); got != "false" {
+				t.Errorf("showPermissionSets = %q, want false", got)
+			}
 			_, _ = w.Write([]byte(`{
 				"symbols":[
 					{"symbol":"BTCUSDT","status":"TRADING","baseAsset":"BTC","quoteAsset":"USDT","isSpotTradingAllowed":true},
