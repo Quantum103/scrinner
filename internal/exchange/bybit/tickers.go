@@ -52,31 +52,49 @@ func (a *Adapter) collectTickersWithStats(ctx context.Context, markets []market.
 
 	result := make([]price.Ticker, 0, len(spotSymbols)+len(linearSymbols))
 	stats := TickerStats{}
+	if len(spotSymbols) == 0 && len(linearSymbols) == 0 {
+		return result, stats, nil
+	}
+
+	type categoryResult struct {
+		tickers []price.Ticker
+		stats   TickerStats
+		err     error
+		label   string
+	}
+	enabledCategories := 0
+	results := make(chan categoryResult, 2)
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	if len(spotSymbols) > 0 {
+		enabledCategories++
 		a.logger.Info("fetching Bybit spot tickers")
-		spotTickers, spotStats, err := a.fetchTickers(ctx, spotCategory, spotSymbols)
-		if err != nil {
-			return nil, stats, fmt.Errorf("получить Bybit Spot tickers: %w", err)
-		}
-		result = append(result, spotTickers...)
-		stats.Received += spotStats.Received
-		stats.Valid += spotStats.Valid
-		stats.Skipped += spotStats.Skipped
+		go func() {
+			tickers, tickStats, err := a.fetchTickers(requestCtx, spotCategory, spotSymbols)
+			results <- categoryResult{tickers: tickers, stats: tickStats, err: err, label: "Spot"}
+		}()
 	}
-
 	if len(linearSymbols) > 0 {
+		enabledCategories++
 		a.logger.Info("fetching Bybit linear tickers")
-		linearTickers, linearStats, err := a.fetchTickers(ctx, linearCategory, linearSymbols)
-		if err != nil {
-			return nil, stats, fmt.Errorf("получить Bybit Linear tickers: %w", err)
-		}
-		result = append(result, linearTickers...)
-		stats.Received += linearStats.Received
-		stats.Valid += linearStats.Valid
-		stats.Skipped += linearStats.Skipped
+		go func() {
+			tickers, tickStats, err := a.fetchTickers(requestCtx, linearCategory, linearSymbols)
+			results <- categoryResult{tickers: tickers, stats: tickStats, err: err, label: "Linear"}
+		}()
 	}
 
+	for i := 0; i < enabledCategories; i++ {
+		category := <-results
+		if category.err != nil {
+			cancel()
+			return nil, stats, fmt.Errorf("получить Bybit %s tickers: %w", category.label, category.err)
+		}
+		result = append(result, category.tickers...)
+		stats.Received += category.stats.Received
+		stats.Valid += category.stats.Valid
+		stats.Skipped += category.stats.Skipped
+	}
 	a.logger.Info("Bybit tickers fetched", "received", stats.Received, "valid", stats.Valid, "skipped", stats.Skipped)
 	return result, stats, nil
 }

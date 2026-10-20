@@ -45,27 +45,43 @@ func (a *Adapter) collectTickersWithStats(
 		return result, stats, nil
 	}
 
+	type categoryResult struct {
+		tickers []price.Ticker
+		stats   TickerStats
+		err     error
+		label   string
+	}
+	enabledCategories := 0
+	results := make(chan categoryResult, 2)
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	if len(spotMarkets) > 0 {
-		tickers, tickStats, err := a.fetchSpotTickers(ctx, spotMarkets)
-		if err != nil {
-			return nil, stats, fmt.Errorf("получить Gate Spot tickers: %w", err)
-		}
-		result = append(result, tickers...)
-		stats.Received += tickStats.Received
-		stats.Valid += tickStats.Valid
-		stats.Skipped += tickStats.Skipped
+		enabledCategories++
+		go func() {
+			tickers, tickStats, err := a.fetchSpotTickers(requestCtx, spotMarkets)
+			results <- categoryResult{tickers: tickers, stats: tickStats, err: err, label: "Spot"}
+		}()
 	}
 	if len(futuresMarkets) > 0 {
-		tickers, tickStats, err := a.fetchFuturesTickers(ctx, futuresMarkets)
-		if err != nil {
-			return nil, stats, fmt.Errorf("получить Gate USDT futures tickers: %w", err)
-		}
-		result = append(result, tickers...)
-		stats.Received += tickStats.Received
-		stats.Valid += tickStats.Valid
-		stats.Skipped += tickStats.Skipped
+		enabledCategories++
+		go func() {
+			tickers, tickStats, err := a.fetchFuturesTickers(requestCtx, futuresMarkets)
+			results <- categoryResult{tickers: tickers, stats: tickStats, err: err, label: "USDT Perpetual"}
+		}()
 	}
 
+	for i := 0; i < enabledCategories; i++ {
+		category := <-results
+		if category.err != nil {
+			cancel()
+			return nil, stats, fmt.Errorf("получить Gate %s tickers: %w", category.label, category.err)
+		}
+		result = append(result, category.tickers...)
+		stats.Received += category.stats.Received
+		stats.Valid += category.stats.Valid
+		stats.Skipped += category.stats.Skipped
+	}
 	a.logger.Info("Gate tickers fetched", "received", stats.Received, "valid", stats.Valid, "skipped", stats.Skipped)
 	return result, stats, nil
 }
@@ -74,21 +90,6 @@ func (a *Adapter) fetchSpotTickers(
 	ctx context.Context,
 	requested map[string]market.Market,
 ) ([]price.Ticker, TickerStats, error) {
-	a.mu.Lock()
-	if a.hasSpotTickerCache {
-		response := append([]spotTicker(nil), a.spotTickerCache...)
-		receivedAt := a.spotTickerReceivedAt
-		a.spotTickerCache = nil
-		a.spotTickerReceivedAt = time.Time{}
-		a.hasSpotTickerCache = false
-		a.mu.Unlock()
-		if len(response) == 0 || receivedAt.IsZero() {
-			return nil, TickerStats{}, fmt.Errorf("Gate Spot ticker cache пуст или не содержит времени получения")
-		}
-		return buildSpotTickers(response, requested, receivedAt)
-	}
-	a.mu.Unlock()
-
 	var response []spotTicker
 	receivedAt, err := a.client.getJSON(ctx, "получить Spot tickers", spotTickersEndpoint, &response)
 	if err != nil {

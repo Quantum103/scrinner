@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -56,28 +57,43 @@ func (a *Adapter) collectTickersWithStats(
 		return tickers, stats, nil
 	}
 
+	type categoryResult struct {
+		tickers []price.Ticker
+		stats   TickerStats
+		err     error
+		label   string
+	}
+	enabledCategories := 0
+	results := make(chan categoryResult, 2)
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	if len(spotMarkets) > 0 {
-		spotTickers, spotStats, err := a.fetchSpotTickers(ctx, spotMarkets)
-		if err != nil {
-			return nil, stats, fmt.Errorf("получить Binance Spot tickers: %w", err)
-		}
-		tickers = append(tickers, spotTickers...)
-		stats.Received += spotStats.Received
-		stats.Valid += spotStats.Valid
-		stats.Skipped += spotStats.Skipped
+		enabledCategories++
+		go func() {
+			result, categoryStats, err := a.fetchSpotTickers(requestCtx, spotMarkets)
+			results <- categoryResult{tickers: result, stats: categoryStats, err: err, label: "Spot"}
+		}()
 	}
-
 	if len(futuresMarkets) > 0 {
-		futuresTickers, futuresStats, err := a.fetchFuturesTickers(ctx, futuresMarkets)
-		if err != nil {
-			return nil, stats, fmt.Errorf("получить Binance USD-M Futures tickers: %w", err)
-		}
-		tickers = append(tickers, futuresTickers...)
-		stats.Received += futuresStats.Received
-		stats.Valid += futuresStats.Valid
-		stats.Skipped += futuresStats.Skipped
+		enabledCategories++
+		go func() {
+			result, categoryStats, err := a.fetchFuturesTickers(requestCtx, futuresMarkets)
+			results <- categoryResult{tickers: result, stats: categoryStats, err: err, label: "USD-M Futures"}
+		}()
 	}
 
+	for i := 0; i < enabledCategories; i++ {
+		category := <-results
+		if category.err != nil {
+			cancel()
+			return nil, stats, fmt.Errorf("получить Binance %s tickers: %w", category.label, category.err)
+		}
+		tickers = append(tickers, category.tickers...)
+		stats.Received += category.stats.Received
+		stats.Valid += category.stats.Valid
+		stats.Skipped += category.stats.Skipped
+	}
 	a.logger.Info(
 		"Binance tickers fetched",
 		"received", stats.Received,
@@ -91,25 +107,47 @@ func (a *Adapter) fetchSpotTickers(
 	ctx context.Context,
 	requested map[string]market.Market,
 ) ([]price.Ticker, TickerStats, error) {
+	type result struct {
+		book      []bookTicker
+		volumes   map[string]*decimal.Decimal
+		receivedAt time.Time
+		err       error
+		kind      string
+	}
+	results := make(chan result, 2)
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		var book []bookTicker
+		receivedAt, err := a.client.getJSON(
+			requestCtx, false, "получить Spot bookTicker",
+			spotBookTickerEndpoint, url.Values{}, &book,
+		)
+		results <- result{book: book, receivedAt: receivedAt, err: err, kind: "bookTicker"}
+	}()
+	go func() {
+		volumes, err := a.fetchSpotVolumes(requestCtx, requested)
+		results <- result{volumes: volumes, err: err, kind: "24h volume"}
+	}()
+
 	var book []bookTicker
-	receivedAt, err := a.client.getJSON(
-		ctx,
-		false,
-		"получить Spot bookTicker",
-		spotBookTickerEndpoint,
-		url.Values{},
-		&book,
-	)
-	if err != nil {
-		return nil, TickerStats{}, err
+	var volumes map[string]*decimal.Decimal
+	var receivedAt time.Time
+	for range 2 {
+		item := <-results
+		if item.err != nil {
+			cancel()
+			return nil, TickerStats{}, fmt.Errorf("получить Binance Spot %s: %w", item.kind, item.err)
+		}
+		if item.kind == "bookTicker" {
+			book, receivedAt = item.book, item.receivedAt
+		} else {
+			volumes = item.volumes
+		}
 	}
 	if book == nil {
 		return nil, TickerStats{}, fmt.Errorf("Binance Spot bookTicker: ожидался JSON-массив")
-	}
-
-	volumes, err := a.fetchSpotVolumes(ctx, requested)
-	if err != nil {
-		return nil, TickerStats{}, err
 	}
 	return buildTickers("binance", market.MarketTypeSpot, market.ContractTypeSpot, book, requested, volumes, receivedAt)
 }
@@ -118,32 +156,51 @@ func (a *Adapter) fetchFuturesTickers(
 	ctx context.Context,
 	requested map[string]market.Market,
 ) ([]price.Ticker, TickerStats, error) {
+	type result struct {
+		book       []bookTicker
+		response   []futures24hrTicker
+		receivedAt time.Time
+		err        error
+		kind       string
+	}
+	results := make(chan result, 2)
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		var book []bookTicker
+		receivedAt, err := a.client.getJSON(
+			requestCtx, true, "получить USD-M Futures bookTicker",
+			futuresBookTickerEndpoint, url.Values{}, &book,
+		)
+		results <- result{book: book, receivedAt: receivedAt, err: err, kind: "bookTicker"}
+	}()
+	go func() {
+		var response []futures24hrTicker
+		_, err := a.client.getJSON(
+			requestCtx, true, "получить USD-M Futures статистику за 24 часа",
+			futures24hrTickerEndpoint, url.Values{}, &response,
+		)
+		results <- result{response: response, err: err, kind: "24h volume"}
+	}()
+
 	var book []bookTicker
-	receivedAt, err := a.client.getJSON(
-		ctx,
-		true,
-		"получить USD-M Futures bookTicker",
-		futuresBookTickerEndpoint,
-		url.Values{},
-		&book,
-	)
-	if err != nil {
-		return nil, TickerStats{}, err
+	var response []futures24hrTicker
+	var receivedAt time.Time
+	for range 2 {
+		item := <-results
+		if item.err != nil {
+			cancel()
+			return nil, TickerStats{}, fmt.Errorf("получить Binance USD-M Futures %s: %w", item.kind, item.err)
+		}
+		if item.kind == "bookTicker" {
+			book, receivedAt = item.book, item.receivedAt
+		} else {
+			response = item.response
+		}
 	}
 	if book == nil {
 		return nil, TickerStats{}, fmt.Errorf("Binance USD-M Futures bookTicker: ожидался JSON-массив")
-	}
-
-	var response []futures24hrTicker
-	if _, err := a.client.getJSON(
-		ctx,
-		true,
-		"получить USD-M Futures статистику за 24 часа",
-		futures24hrTickerEndpoint,
-		url.Values{},
-		&response,
-	); err != nil {
-		return nil, TickerStats{}, err
 	}
 	if response == nil {
 		return nil, TickerStats{}, fmt.Errorf("Binance USD-M Futures ticker/24hr: ожидался JSON-массив")
@@ -159,7 +216,6 @@ func (a *Adapter) fetchFuturesTickers(
 			volumes[symbol] = value
 		}
 	}
-
 	return buildTickers("binance", market.MarketTypeFutures, market.ContractTypePerpetual, book, requested, volumes, receivedAt)
 }
 
@@ -173,43 +229,83 @@ func (a *Adapter) fetchSpotVolumes(
 		symbols = append(symbols, symbol)
 	}
 
-	volumes := make(map[string]*decimal.Decimal, len(symbols))
+	sort.Strings(symbols)
+	chunks := make([][]string, 0, (len(symbols)+maxSpotSymbols-1)/maxSpotSymbols)
 	for start := 0; start < len(symbols); start += maxSpotSymbols {
 		end := start + maxSpotSymbols
 		if end > len(symbols) {
 			end = len(symbols)
 		}
-		encoded, err := json.Marshal(symbols[start:end])
-		if err != nil {
-			return nil, fmt.Errorf("сформировать список Binance Spot symbols: %w", err)
-		}
+		chunks = append(chunks, append([]string(nil), symbols[start:end]...))
+	}
 
-		query := url.Values{}
-		query.Set("symbols", string(encoded))
-		var response []spot24hrTicker
-		if _, err := a.client.getJSON(
-			ctx,
-			false,
-			"получить Spot статистику за 24 часа",
-			spot24hrTickerEndpoint,
-			query,
-			&response,
-		); err != nil {
-			return nil, err
-		}
-		if response == nil {
-			return nil, fmt.Errorf("Binance Spot ticker/24hr: ожидался JSON-массив")
-		}
+	type chunkResult struct {
+		volumes map[string]*decimal.Decimal
+		err     error
+	}
+	results := make(chan chunkResult, len(chunks))
+	semaphore := make(chan struct{}, 3)
+	for _, chunk := range chunks {
+		chunk := chunk
+		go func() {
+			select {
+			case semaphore <- struct{}{}:
+				defer func() { <-semaphore }()
+			case <-ctx.Done():
+				results <- chunkResult{err: ctx.Err()}
+				return
+			}
 
-		for _, item := range response {
-			symbol := strings.ToUpper(strings.TrimSpace(item.Symbol))
-			if symbol == "" {
-				continue
+			encoded, err := json.Marshal(chunk)
+			if err != nil {
+				results <- chunkResult{err: fmt.Errorf("сформировать список Binance Spot symbols: %w", err)}
+				return
 			}
-			if value := parseVolume(item.Volume); value != nil {
-				volumes[symbol] = value
+			query := url.Values{}
+			query.Set("symbols", string(encoded))
+			var response []spot24hrTicker
+			if _, err := a.client.getJSON(
+				ctx, false, "получить Spot статистику за 24 часа",
+				spot24hrTickerEndpoint, query, &response,
+			); err != nil {
+				results <- chunkResult{err: err}
+				return
 			}
+			if response == nil {
+				results <- chunkResult{err: fmt.Errorf("Binance Spot ticker/24hr: ожидался JSON-массив")}
+				return
+			}
+
+			volumes := make(map[string]*decimal.Decimal, len(response))
+			for _, item := range response {
+				symbol := strings.ToUpper(strings.TrimSpace(item.Symbol))
+				if symbol == "" {
+					continue
+				}
+				if value := parseVolume(item.Volume); value != nil {
+					volumes[symbol] = value
+				}
+			}
+			results <- chunkResult{volumes: volumes}
+		}()
+	}
+
+	volumes := make(map[string]*decimal.Decimal, len(symbols))
+	var firstErr error
+	for range len(chunks) {
+		result := <-results
+		if result.err != nil {
+			if firstErr == nil {
+				firstErr = result.err
+			}
+			continue
 		}
+		for symbol, volume := range result.volumes {
+			volumes[symbol] = volume
+		}
+	}
+	if firstErr != nil {
+		return nil, firstErr
 	}
 	return volumes, nil
 }

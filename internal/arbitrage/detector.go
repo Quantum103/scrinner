@@ -107,7 +107,7 @@ func (d *Detector) Detect(quotes []Quote, now time.Time) []Opportunity {
 				if strings.EqualFold(first.Market.Exchange, second.Market.Exchange) {
 					continue
 				}
-				if !quoteTimesCompatible(first.Ticker, second.Ticker, now, d.MaxQuoteSkew) {
+				if !quoteTimesCompatible(first.Ticker, second.Ticker, now, d.MaxDataAge, d.MaxQuoteSkew) {
 					continue
 				}
 
@@ -131,6 +131,12 @@ func (d *Detector) meetsThreshold(buyAsk, sellBid decimal.Decimal) bool {
 	if !buyAsk.GreaterThan(decimal.Zero) || !sellBid.GreaterThan(buyAsk) {
 		return false
 	}
+	// Защитный предел: расхождение цены свыше 100% (цена продажи более чем вдвое
+	// выше Ask покупки) чаще означает несопоставимые единицы контракта/актива.
+	// Такие сигналы не должны попадать в таблицу как обычные арбитражные возможности.
+	if sellBid.GreaterThan(buyAsk.Mul(decimal.NewFromInt(2))) {
+		return false
+	}
 	// Сравниваем произведения точно; не округляем результат деления до проверки порога.
 	hundred := decimal.NewFromInt(100)
 	return sellBid.Mul(hundred).GreaterThanOrEqual(buyAsk.Mul(hundred.Add(d.MinSpreadPercent)))
@@ -141,7 +147,7 @@ func normalizeQuote(quote Quote, now time.Time, maxAge time.Duration) (Quote, bo
 		return Quote{}, false
 	}
 	normalized, err := market.NormalizeMarket(quote.Market)
-	if err != nil || !market.IsSupportedMarket(normalized) {
+	if err != nil || !market.IsSupportedMarket(normalized) || !market.SymbolMatchesAssets(normalized) {
 		return Quote{}, false
 	}
 	if !strings.EqualFold(strings.TrimSpace(quote.Ticker.Exchange), normalized.Exchange) ||
@@ -155,13 +161,13 @@ func normalizeQuote(quote Quote, now time.Time, maxAge time.Duration) (Quote, bo
 	return quote, true
 }
 
-func quoteTimesCompatible(first, second price.Ticker, now time.Time, maxSkew time.Duration) bool {
+func quoteTimesCompatible(first, second price.Ticker, now time.Time, maxAge, maxSkew time.Duration) bool {
 	firstTime := first.ObservationTime()
 	secondTime := second.ObservationTime()
-	if firstTime.IsZero() || secondTime.IsZero() || maxSkew <= 0 {
+	if firstTime.IsZero() || secondTime.IsZero() || maxAge <= 0 || maxSkew <= 0 {
 		return false
 	}
-	if !timestampWithinRange(firstTime, now, maxSkew) || !timestampWithinRange(secondTime, now, maxSkew) {
+	if !timestampWithinRange(firstTime, now, maxAge) || !timestampWithinRange(secondTime, now, maxAge) {
 		return false
 	}
 	delta := firstTime.Sub(secondTime)

@@ -229,6 +229,10 @@ func TestCollectTickersRejectsEmptyBulkResponses(t *testing.T) {
 					_, _ = w.Write([]byte(tc.body))
 					return
 				}
+				if tc.name == "Spot" && r.URL.Path == spot24hrTickerEndpoint {
+					_, _ = w.Write([]byte(`[]`))
+					return
+				}
 				t.Fatalf("неожиданный endpoint %s", r.URL.Path)
 			}))
 			defer server.Close()

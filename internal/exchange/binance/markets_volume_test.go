@@ -7,12 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"sync/atomic"
 
 	"github.com/example/crypto-arbitrage-scanner/internal/market"
 )
 
 func TestFetchSpotVolumesChunksAtOneHundredSymbols(t *testing.T) {
-	calls := 0
+	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != spot24hrTickerEndpoint {
 			t.Fatalf("неожиданный endpoint: %s", r.URL.Path)
@@ -24,7 +25,7 @@ func TestFetchSpotVolumesChunksAtOneHundredSymbols(t *testing.T) {
 		if len(symbols) == 0 || len(symbols) > maxSpotSymbols {
 			t.Fatalf("размер пакета вне лимита: %d", len(symbols))
 		}
-		calls++
+		calls.Add(1)
 		if err := json.NewEncoder(w).Encode([]spot24hrTicker{}); err != nil {
 			t.Fatal(err)
 		}
@@ -49,7 +50,7 @@ func TestFetchSpotVolumesChunksAtOneHundredSymbols(t *testing.T) {
 	if len(volumes) != 0 {
 		t.Fatalf("ожидалось отсутствие объёмов в пустых ответах: %d", len(volumes))
 	}
-	if calls != 3 {
-		t.Fatalf("для 205 инструментов ожидалось 3 запроса, получено %d", calls)
+	if calls.Load() != 3 {
+		t.Fatalf("для 205 инструментов ожидалось 3 запроса, получено %d", calls.Load())
 	}
 }

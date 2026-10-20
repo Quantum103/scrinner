@@ -162,6 +162,73 @@ func TestRunnerPersistsQuotesAndDetectsOpportunityDespiteOneExchangeFailure(t *t
 	}
 }
 
+type delayedFailureExchange struct {
+	fakeExchange
+	delay time.Duration
+}
+
+func (f *delayedFailureExchange) CollectTickers(ctx context.Context, markets []market.Market) ([]price.Ticker, error) {
+	select {
+	case <-time.After(f.delay):
+		if f.tickerErr != nil {
+			return nil, f.tickerErr
+		}
+		return nil, errors.New("delayed fixture failure")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func TestRunnerPersistsFastExchangeBeforeSlowExchangeFinishes(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	db := openTestDB(t)
+	now := time.Now().UTC()
+
+	fastMarket := market.Market{
+		Exchange: "binance", Symbol: "FASTUSDT", BaseAsset: "FAST", QuoteAsset: "USDT",
+		MarketType: market.MarketTypeSpot, ContractType: market.ContractTypeSpot, Active: true,
+	}
+	slowMarket := market.Market{
+		Exchange: "bitget", Symbol: "SLOWUSDT", BaseAsset: "SLOW", QuoteAsset: "USDT",
+		MarketType: market.MarketTypeSpot, ContractType: market.ContractTypeSpot, Active: true,
+	}
+	slowFailure := errors.New("fixture: delayed endpoint")
+	adapters := []exchange.Exchange{
+		&fakeExchange{
+			name: "binance", markets: []market.Market{fastMarket},
+			tickers: []price.Ticker{fakeTicker(fastMarket, "9", "10", now.Add(time.Second))},
+		},
+		&delayedFailureExchange{
+			fakeExchange: fakeExchange{
+				name: "bitget", markets: []market.Market{slowMarket}, tickerErr: slowFailure,
+			},
+			delay: 600 * time.Millisecond,
+		},
+	}
+	runner, err := NewRunner(adapters, db, Config{
+		MinSpreadPercent: decimal.NewFromInt(1), MaxDataAge: 250 * time.Millisecond,
+		MaxConcurrentExchanges: 2,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runner.RunCycle(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != CycleStatusPartial {
+		t.Fatalf("ожидался частичный цикл из-за медленной биржи, получено %q: %#v", result.Status, result)
+	}
+	if result.SnapshotsSaved != 1 || result.Exchanges[0].SnapshotsSaved != 1 || result.Exchanges[0].TickersAccepted != 1 {
+		t.Fatalf("быстрая биржа должна сохранять котировку до завершения медленной: %#v", result)
+	}
+	if result.Exchanges[1].Error == "" {
+		t.Fatalf("ошибка медленной биржи должна быть отражена отдельно: %#v", result.Exchanges)
+	}
+}
+
 func TestRunnerBoundsConcurrentExchangeRequests(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

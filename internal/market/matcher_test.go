@@ -142,6 +142,25 @@ func TestAreMarketsComparableRejectsUnsupportedContract(t *testing.T) {
 	}
 }
 
+func TestSymbolMatchesAssetsRejectsScaledContractSymbols(t *testing.T) {
+	t.Parallel()
+
+	valid := testPerpetualMarket("bybit", "1000PEPEUSDT", "1000PEPE")
+	if !SymbolMatchesAssets(valid) {
+		t.Fatal("a symbol whose base asset includes the unit multiplier should match")
+	}
+
+	inconsistent := testPerpetualMarket("bybit", "1000PEPEUSDT", "PEPE")
+	if SymbolMatchesAssets(inconsistent) {
+		t.Fatal("1000PEPEUSDT must not be treated as a PEPE-priced market")
+	}
+
+	spot := testSpotMarket("gate", "PEPE_USDT", "PEPE")
+	if AreMarketsComparable(spot, inconsistent) {
+		t.Fatal("a PEPE spot price must not be compared with a 1000PEPE contract priced per scaled unit")
+	}
+}
+
 func TestMarketIdentityEqual(t *testing.T) {
 	t.Parallel()
 

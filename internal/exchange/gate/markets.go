@@ -21,7 +21,7 @@ func (a *Adapter) discoverMarkets(ctx context.Context) ([]market.Market, error) 
 
 	// Пакетные Spot-тикеры содержат ETF-специфичные поля, которых нет в метаданных пары.
 	var spotTickerResponse []spotTicker
-	spotTickerReceivedAt, err := a.client.getJSON(ctx, "получить Spot tickers для фильтрации ETF", spotTickersEndpoint, &spotTickerResponse)
+	_, err := a.client.getJSON(ctx, "получить Spot tickers для фильтрации ETF", spotTickersEndpoint, &spotTickerResponse)
 	if err != nil {
 		return nil, fmt.Errorf("получить Gate Spot tickers при обнаружении рынков: %w", err)
 	}
@@ -46,12 +46,6 @@ func (a *Adapter) discoverMarkets(ctx context.Context) ([]market.Market, error) 
 	markets := make([]market.Market, 0, len(spotPairs)+len(contracts))
 	seen := make(map[string]struct{}, len(markets))
 	spotCount, perpetualCount := 0, 0
-
-	a.mu.Lock()
-	a.spotTickerCache = append([]spotTicker(nil), spotTickerResponse...)
-	a.spotTickerReceivedAt = spotTickerReceivedAt
-	a.hasSpotTickerCache = true
-	a.mu.Unlock()
 
 	for _, pair := range spotPairs {
 		if !strings.EqualFold(strings.TrimSpace(pair.Quote), usdtAsset) {
