@@ -94,6 +94,15 @@ func TestLoadKeepsExchangeAndStatsDefaults(t *testing.T) {
 	}
 }
 
+
+func TestLoadRejectsUnknownEnabledExchange(t *testing.T) {
+	text := strings.Replace(validConfigYAML, "exchanges:\n", "exchanges:\n  kraken:\n    enabled: true\n", 1)
+	_, err := Load(writeValidationConfig(t, text))
+	if err == nil || !strings.Contains(err.Error(), "exchanges.kraken.enabled") {
+		t.Fatalf("включение неподдерживаемой биржи должно быть отклонено: %v", err)
+	}
+}
+
 func TestLoadURLValidationDoesNotEchoUserInfo(t *testing.T) {
 	text := strings.Replace(validConfigYAML, "  bybit:\n    enabled: true", "  bybit:\n    enabled: true\n  gate:\n    enabled: true\n    base_url: https://secret:secret@example.org", 1)
 	_, err := Load(writeValidationConfig(t, text))

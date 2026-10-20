@@ -94,6 +94,9 @@ func Load(path string) (Config, error) {
 		return Config{}, err
 	}
 	cfg.Warnings = unknownYAMLFields(data)
+	if unknown := unknownEnabledExchanges(data); len(unknown) > 0 {
+		return Config{}, fmt.Errorf("exchanges.%s.enabled: нет поддерживаемого адаптера; доступны только Binance, Bybit, MEXC, OKX, Gate и Bitget", strings.Join(unknown, ", "))
+	}
 
 	if err := cfg.parseDurations(); err != nil {
 		return Config{}, err
@@ -212,6 +215,48 @@ func unknownYAMLFields(data []byte) []string {
 	}
 	sort.Strings(warnings)
 	return warnings
+}
+
+// unknownEnabledExchanges обнаруживает неизвестные биржи, явно включённые в YAML.
+func unknownEnabledExchanges(data []byte) []string {
+	var document yaml.Node
+	if err := yaml.Unmarshal(data, &document); err != nil || len(document.Content) == 0 {
+		return nil
+	}
+	root := document.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	known := map[string]bool{
+		"binance": true, "bybit": true, "mexc": true,
+		"okx": true, "gate": true, "bitget": true,
+	}
+	var exchanges *yaml.Node
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == "exchanges" {
+			exchanges = root.Content[i+1]
+			break
+		}
+	}
+	if exchanges == nil || exchanges.Kind != yaml.MappingNode {
+		return nil
+	}
+	var result []string
+	for i := 0; i+1 < len(exchanges.Content); i += 2 {
+		name := exchanges.Content[i].Value
+		value := exchanges.Content[i+1]
+		if known[name] || value.Kind != yaml.MappingNode {
+			continue
+		}
+		for j := 0; j+1 < len(value.Content); j += 2 {
+			if value.Content[j].Value == "enabled" && strings.EqualFold(strings.TrimSpace(value.Content[j+1].Value), "true") {
+				result = append(result, name)
+				break
+			}
+		}
+	}
+	sort.Strings(result)
+	return result
 }
 
 // parseDurations преобразует строковые интервалы YAML в time.Duration.
