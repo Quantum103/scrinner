@@ -98,32 +98,51 @@ func (a *Adapter) fetchSpotTickers(
 	ctx context.Context,
 	requested map[string]market.Market,
 ) ([]price.Ticker, TickerStats, error) {
+	type result struct {
+		book       spotTickerList
+		stats      spotStatsList
+		receivedAt time.Time
+		err        error
+		kind       string
+	}
+	results := make(chan result, 2)
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		var book spotTickerList
+		receivedAt, err := a.client.getJSON(
+			requestCtx, false, "получить Spot bookTicker",
+			spotBookTickerEndpoint, url.Values{}, &book,
+		)
+		results <- result{book: book, receivedAt: receivedAt, err: err, kind: "bookTicker"}
+	}()
+	go func() {
+		var stats spotStatsList
+		_, err := a.client.getJSON(
+			requestCtx, false, "получить Spot статистику за 24 часа",
+			spot24hrTickerEndpoint, url.Values{}, &stats,
+		)
+		results <- result{stats: stats, err: err, kind: "24h volume"}
+	}()
+
 	var book spotTickerList
-	receivedAt, err := a.client.getJSON(
-		ctx,
-		false,
-		"получить Spot bookTicker",
-		spotBookTickerEndpoint,
-		url.Values{},
-		&book,
-	)
-	if err != nil {
-		return nil, TickerStats{}, err
+	var statsResponse spotStatsList
+	var receivedAt time.Time
+	for range 2 {
+		item := <-results
+		if item.err != nil {
+			cancel()
+			return nil, TickerStats{}, fmt.Errorf("получить MEXC Spot %s: %w", item.kind, item.err)
+		}
+		if item.kind == "bookTicker" {
+			book, receivedAt = item.book, item.receivedAt
+		} else {
+			statsResponse = item.stats
+		}
 	}
 	if len(book) == 0 {
 		return nil, TickerStats{}, fmt.Errorf("MEXC Spot bookTicker: ответ не содержит котировок")
-	}
-
-	var statsResponse spotStatsList
-	if _, err := a.client.getJSON(
-		ctx,
-		false,
-		"получить Spot статистику за 24 часа",
-		spot24hrTickerEndpoint,
-		url.Values{},
-		&statsResponse,
-	); err != nil {
-		return nil, TickerStats{}, err
 	}
 	if statsResponse == nil {
 		return nil, TickerStats{}, fmt.Errorf("MEXC Spot ticker/24hr: ожидался массив или объект статистики")
