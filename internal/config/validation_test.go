@@ -94,7 +94,6 @@ func TestLoadKeepsExchangeAndStatsDefaults(t *testing.T) {
 	}
 }
 
-
 func TestLoadRejectsUnknownEnabledExchange(t *testing.T) {
 	text := strings.Replace(validConfigYAML, "exchanges:\n", "exchanges:\n  kraken:\n    enabled: true\n", 1)
 	_, err := Load(writeValidationConfig(t, text))
