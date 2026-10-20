@@ -74,21 +74,6 @@ func (a *Adapter) fetchSpotTickers(
 	ctx context.Context,
 	requested map[string]market.Market,
 ) ([]price.Ticker, TickerStats, error) {
-	a.mu.Lock()
-	if a.hasSpotTickerCache {
-		response := append([]spotTicker(nil), a.spotTickerCache...)
-		receivedAt := a.spotTickerReceivedAt
-		a.spotTickerCache = nil
-		a.spotTickerReceivedAt = time.Time{}
-		a.hasSpotTickerCache = false
-		a.mu.Unlock()
-		if len(response) == 0 || receivedAt.IsZero() {
-			return nil, TickerStats{}, fmt.Errorf("Gate Spot ticker cache пуст или не содержит времени получения")
-		}
-		return buildSpotTickers(response, requested, receivedAt)
-	}
-	a.mu.Unlock()
-
 	var response []spotTicker
 	receivedAt, err := a.client.getJSON(ctx, "получить Spot tickers", spotTickersEndpoint, &response)
 	if err != nil {
