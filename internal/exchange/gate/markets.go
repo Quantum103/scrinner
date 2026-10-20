@@ -47,7 +47,6 @@ func (a *Adapter) discoverMarkets(ctx context.Context) ([]market.Market, error) 
 	seen := make(map[string]struct{}, len(markets))
 	spotCount, perpetualCount := 0, 0
 
-
 	for _, pair := range spotPairs {
 		if !strings.EqualFold(strings.TrimSpace(pair.Quote), usdtAsset) {
 			continue
