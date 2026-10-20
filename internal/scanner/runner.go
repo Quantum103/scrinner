@@ -34,6 +34,7 @@ type Config struct {
 // ExchangeStatus описывает результат опроса одной биржи в текущем цикле.
 type ExchangeStatus struct {
 	Name              string
+	Duration          time.Duration
 	Markets           int
 	MetadataRefreshed bool
 	TickersReceived   int
@@ -50,6 +51,7 @@ type CycleResult struct {
 	Status                string
 	StartedAt             time.Time
 	FinishedAt            time.Time
+	CollectionDuration    time.Duration
 	ExchangesEnabled      int
 	ExchangesSucceeded    int
 	ExchangesFailed       int
@@ -139,6 +141,7 @@ func NewRunner(
 
 type exchangeBatch struct {
 	name              string
+	duration          time.Duration
 	markets           []market.Market
 	tickers           []price.Ticker
 	tickersReceived   int
@@ -222,11 +225,14 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 		return result, cycleFinalizeErr
 	}
 
+	collectionStartedAt := time.Now()
 	batches := r.collectInParallel(ctx, result.ID)
+	result.CollectionDuration = time.Since(collectionStartedAt)
 	statuses := make([]ExchangeStatus, len(batches))
 	for i, batch := range batches {
 		status := ExchangeStatus{
 			Name:              batch.name,
+			Duration:          batch.duration,
 			Markets:           len(batch.markets),
 			MetadataRefreshed: batch.metadataRefreshed,
 			TickersReceived:   batch.tickersReceived,
@@ -359,7 +365,8 @@ func (r *Runner) RunCycle(ctx context.Context) (CycleResult, error) {
 			"tickers_received", status.TickersReceived,
 			"tickers_accepted", status.TickersAccepted,
 			"tickers_rejected", status.TickersRejected,
-			"snapshots_saved", status.SnapshotsSaved)
+			"snapshots_saved", status.SnapshotsSaved,
+			"duration", status.Duration)
 	}
 	result.Exchanges = statuses
 
@@ -416,6 +423,7 @@ func (r *Runner) logCycle(result CycleResult) {
 		"started_at", result.StartedAt,
 		"finished_at", result.FinishedAt,
 		"duration", result.FinishedAt.Sub(result.StartedAt),
+		"collection_duration", result.CollectionDuration,
 		"exchanges_enabled", result.ExchangesEnabled,
 		"exchanges_succeeded", result.ExchangesSucceeded,
 		"exchanges_failed", result.ExchangesFailed,
@@ -453,8 +461,15 @@ func (r *Runner) Run(ctx context.Context, interval time.Duration) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if _, err := r.RunCycle(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		cycleResult, err := r.RunCycle(ctx)
+		if err != nil && !errors.Is(err, context.Canceled) {
 			r.logger.Error("цикл сканирования завершился ошибкой", "error", err)
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if cycleResult.ID != "" {
+			r.logger.Info("ожидание до следующего цикла", "cycle_id", cycleResult.ID, "wait_duration", interval)
 		}
 		timer := time.NewTimer(interval)
 		select {
@@ -487,19 +502,21 @@ func (r *Runner) collectInParallel(ctx context.Context, cycleID string) []exchan
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			startedAt := time.Now()
 			name := ""
 			if adapter != nil {
 				name = strings.TrimSpace(adapter.Name())
 			}
-			results[i] = exchangeBatch{name: name}
 			select {
 			case semaphore <- struct{}{}:
 				defer func() { <-semaphore }()
 			case <-ctx.Done():
-				results[i].err = ctx.Err()
+				results[i] = exchangeBatch{name: name, duration: time.Since(startedAt), err: ctx.Err()}
 				return
 			}
-			results[i] = r.collectOne(ctx, adapter, cycleID)
+			batch := r.collectOne(ctx, adapter, cycleID)
+			batch.duration = time.Since(startedAt)
+			results[i] = batch
 		}()
 	}
 	wg.Wait()
