@@ -4,7 +4,6 @@ package gate
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange"
 	"github.com/example/crypto-arbitrage-scanner/internal/market"
@@ -15,7 +14,6 @@ import (
 type Adapter struct {
 	client *Client
 	logger *slog.Logger
-
 }
 
 var _ exchange.Exchange = (*Adapter)(nil)
