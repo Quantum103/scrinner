@@ -27,13 +27,13 @@ type doctorCheck struct {
 
 // doctorReport содержит результаты локальной диагностики приложения.
 type doctorReport struct {
-	GeneratedAt      time.Time        `json:"generated_at"`
-	OK               bool             `json:"ok"`
-	Checks           []doctorCheck    `json:"checks"`
-	Warnings         []string         `json:"warnings,omitempty"`
-	SupportedExchanges []string       `json:"supported_exchanges"`
-	EnabledAdapters  []string         `json:"enabled_adapters"`
-	Database         map[string]int64 `json:"database_table_counts,omitempty"`
+	GeneratedAt        time.Time        `json:"generated_at"`
+	OK                 bool             `json:"ok"`
+	Checks             []doctorCheck    `json:"checks"`
+	Warnings           []string         `json:"warnings,omitempty"`
+	SupportedExchanges []string        `json:"supported_exchanges"`
+	EnabledAdapters    []string         `json:"enabled_adapters"`
+	Database           map[string]int64 `json:"database_table_counts,omitempty"`
 }
 
 func runDoctorCommand(args []string, stdout, stderr io.Writer) error {
@@ -55,8 +55,8 @@ func runDoctorCommand(args []string, stdout, stderr io.Writer) error {
 
 	report := doctorReport{
 		GeneratedAt: time.Now().UTC(),
-		Checks: []doctorCheck{},
-		Warnings: []string{},
+		Checks:      []doctorCheck{},
+		Warnings:    []string{},
 		SupportedExchanges: []string{
 			string(exchange.ExchangeBinance), string(exchange.ExchangeBybit), string(exchange.ExchangeMEXC),
 			string(exchange.ExchangeOKX), string(exchange.ExchangeGate), string(exchange.ExchangeBitget),
@@ -65,13 +65,13 @@ func runDoctorCommand(args []string, stdout, stderr io.Writer) error {
 	}
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		report.Checks = append(report.Checks, doctorCheck{Name:"configuration", Status:"failed", Message:err.Error()})
+		report.Checks = append(report.Checks, doctorCheck{Name: "configuration", Status: "failed", Message: err.Error()})
 		if renderErr := renderDoctorReport(stdout, report, *format); renderErr != nil {
 			return errors.Join(err, renderErr)
 		}
 		return err
 	}
-	report.Checks = append(report.Checks, doctorCheck{Name:"configuration", Status:"ok", Message:"YAML прочитан; обязательные параметры и значения проверены"})
+	report.Checks = append(report.Checks, doctorCheck{Name: "configuration", Status: "ok", Message: "YAML прочитан; обязательные параметры и значения проверены"})
 	for _, warning := range cfg.Warnings {
 		report.Warnings = append(report.Warnings, "неизвестное поле конфигурации: "+warning)
 	}
@@ -84,7 +84,7 @@ func runDoctorCommand(args []string, stdout, stderr io.Writer) error {
 		unknownStatus = "warning"
 		unknownMessage = "неизвестные YAML-поля игнорируются для совместимости: " + strings.Join(cfg.Warnings, ", ")
 	}
-	report.Checks = append(report.Checks, doctorCheck{Name:"unknown_config_fields", Status:unknownStatus, Message:unknownMessage})
+	report.Checks = append(report.Checks, doctorCheck{Name: "unknown_config_fields", Status: unknownStatus, Message: unknownMessage})
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	adapters := configuredAdapters(cfg.Exchanges, logger)
@@ -109,35 +109,35 @@ func runDoctorCommand(args []string, stdout, stderr io.Writer) error {
 			message += "; все биржи выключены, сбор не запустится"
 			report.Warnings = append(report.Warnings, "все адаптеры бирж выключены")
 		}
-		report.Checks = append(report.Checks, doctorCheck{Name:"exchange_registry", Status:statusWhen(len(adapters) > 0), Message:message})
+		report.Checks = append(report.Checks, doctorCheck{Name: "exchange_registry", Status: statusWhen(len(adapters) > 0), Message: message})
 	} else {
-		report.Checks = append(report.Checks, doctorCheck{Name:"exchange_registry", Status:"failed", Message:"нет регистрации для включённых бирж: "+strings.Join(missing,", ")})
+		report.Checks = append(report.Checks, doctorCheck{Name: "exchange_registry", Status: "failed", Message: "нет регистрации для включённых бирж: " + strings.Join(missing, ", ")})
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	dbReport, dbErr := storage.CheckDatabase(ctx, cfg.Database.Path, *migrationsPath)
 	if dbErr != nil {
-		report.Checks = append(report.Checks, doctorCheck{Name:"sqlite", Status:"failed", Message:dbErr.Error()})
+		report.Checks = append(report.Checks, doctorCheck{Name: "sqlite", Status: "failed", Message: dbErr.Error()})
 	} else {
 		report.Database = dbReport.TableCounts
-		report.Checks = append(report.Checks, doctorCheck{Name:"sqlite", Status:"ok", Message:fmt.Sprintf("целостность, схема версии %d/%d, миграции и чтение таблиц проверены", dbReport.SchemaVersion, dbReport.ExpectedSchemaVersion)})
+		report.Checks = append(report.Checks, doctorCheck{Name: "sqlite", Status: "ok", Message: fmt.Sprintf("целостность, схема версии %d/%d, миграции и чтение таблиц проверены", dbReport.SchemaVersion, dbReport.ExpectedSchemaVersion)})
 		db, openErr := storage.OpenReadOnly(ctx, cfg.Database.Path)
 		if openErr != nil {
-			report.Checks = append(report.Checks, doctorCheck{Name:"runner_initialization", Status:"failed", Message:"не удалось открыть SQLite только для чтения: "+openErr.Error()})
+			report.Checks = append(report.Checks, doctorCheck{Name: "runner_initialization", Status: "failed", Message: "не удалось открыть SQLite только для чтения: " + openErr.Error()})
 		} else {
 			_, runnerErr := scanner.NewRunner(adapters, db, scanner.Config{
-				MinSpreadPercent: decimal.NewFromFloat(cfg.Scanner.MinSpreadPercent),
-				MaxDataAge: cfg.Scanner.MaxDataAge,
+				MinSpreadPercent:       decimal.NewFromFloat(cfg.Scanner.MinSpreadPercent),
+				MaxDataAge:             cfg.Scanner.MaxDataAge,
 				MaxConcurrentExchanges: 6,
 			}, logger)
 			closeErr := db.Close()
 			if runnerErr != nil {
-				report.Checks = append(report.Checks, doctorCheck{Name:"runner_initialization", Status:"failed", Message:runnerErr.Error()})
+				report.Checks = append(report.Checks, doctorCheck{Name: "runner_initialization", Status: "failed", Message: runnerErr.Error()})
 			} else if closeErr != nil {
-				report.Checks = append(report.Checks, doctorCheck{Name:"runner_initialization", Status:"failed", Message:"runner создан, но закрытие диагностического SQLite завершилось ошибкой: "+closeErr.Error()})
+				report.Checks = append(report.Checks, doctorCheck{Name: "runner_initialization", Status: "failed", Message: "runner создан, но закрытие диагностического SQLite завершилось ошибкой: " + closeErr.Error()})
 			} else {
-				report.Checks = append(report.Checks, doctorCheck{Name:"runner_initialization", Status:"ok", Message:"адаптеры и зависимости runner инициализированы; цикл сканирования не запускался"})
+				report.Checks = append(report.Checks, doctorCheck{Name: "runner_initialization", Status: "ok", Message: "адаптеры и зависимости runner инициализированы; цикл сканирования не запускался"})
 			}
 		}
 	}
@@ -159,17 +159,31 @@ func runDoctorCommand(args []string, stdout, stderr io.Writer) error {
 
 func enabledExchangeNames(cfg config.ExchangesConfig) []string {
 	names := make([]string, 0, 6)
-	if cfg.Binance.Enabled { names = append(names, string(exchange.ExchangeBinance)) }
-	if cfg.Bybit.Enabled { names = append(names, string(exchange.ExchangeBybit)) }
-	if cfg.MEXC.Enabled { names = append(names, string(exchange.ExchangeMEXC)) }
-	if cfg.OKX.Enabled { names = append(names, string(exchange.ExchangeOKX)) }
-	if cfg.Gate.Enabled { names = append(names, string(exchange.ExchangeGate)) }
-	if cfg.Bitget.Enabled { names = append(names, string(exchange.ExchangeBitget)) }
+	if cfg.Binance.Enabled {
+		names = append(names, string(exchange.ExchangeBinance))
+	}
+	if cfg.Bybit.Enabled {
+		names = append(names, string(exchange.ExchangeBybit))
+	}
+	if cfg.MEXC.Enabled {
+		names = append(names, string(exchange.ExchangeMEXC))
+	}
+	if cfg.OKX.Enabled {
+		names = append(names, string(exchange.ExchangeOKX))
+	}
+	if cfg.Gate.Enabled {
+		names = append(names, string(exchange.ExchangeGate))
+	}
+	if cfg.Bitget.Enabled {
+		names = append(names, string(exchange.ExchangeBitget))
+	}
 	return names
 }
 
 func statusWhen(ok bool) string {
-	if ok { return "ok" }
+	if ok {
+		return "ok"
+	}
 	return "warning"
 }
 
@@ -180,7 +194,9 @@ func renderDoctorReport(w io.Writer, report doctorReport, format string) error {
 		return encoder.Encode(report)
 	}
 	state := "FAILED"
-	if report.OK { state = "OK" }
+	if report.OK {
+		state = "OK"
+	}
 	fmt.Fprintf(w, "Диагностика сканера: %s\nВремя: %s\n", state, report.GeneratedAt.Format(time.RFC3339))
 	for _, check := range report.Checks {
 		fmt.Fprintf(w, "[%s] %s: %s\n", strings.ToUpper(check.Status), check.Name, check.Message)

@@ -83,7 +83,9 @@ func TestLoadMalformedYAMLAndUnknownFields(t *testing.T) {
 func TestLoadKeepsExchangeAndStatsDefaults(t *testing.T) {
 	text := strings.Replace(validConfigYAML, "stats:\n  timezone: UTC\n  max_observation_gap: 60s\n", "", 1)
 	cfg, err := Load(writeValidationConfig(t, text))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if cfg.Exchanges.MEXC.Enabled || cfg.Exchanges.OKX.Enabled || cfg.Exchanges.Gate.Enabled || cfg.Exchanges.Bitget.Enabled {
 		t.Fatal("выключенные по умолчанию адаптеры неожиданно включились")
 	}

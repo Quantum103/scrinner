@@ -15,21 +15,29 @@ func BenchmarkGroupMarkets(b *testing.B) {
 		base := fmt.Sprintf("ASSET%04d", asset)
 		for _, exchangeName := range exchanges {
 			markets = append(markets,
-				Market{Exchange:exchangeName, Symbol:base+"USDT", BaseAsset:base, QuoteAsset:"USDT", MarketType:MarketTypeSpot, ContractType:ContractTypeSpot, Active:true},
-				Market{Exchange:exchangeName, Symbol:base+"_USDT", BaseAsset:base, QuoteAsset:"USDT", MarketType:MarketTypeFutures, ContractType:ContractTypePerpetual, Active:true},
+				Market{Exchange: exchangeName, Symbol: base + "USDT", BaseAsset: base, QuoteAsset: "USDT", MarketType: MarketTypeSpot, ContractType: ContractTypeSpot, Active: true},
+				Market{Exchange: exchangeName, Symbol: base + "_USDT", BaseAsset: base, QuoteAsset: "USDT", MarketType: MarketTypeFutures, ContractType: ContractTypePerpetual, Active: true},
 			)
 		}
 	}
 	initial, err := GroupMarkets(markets)
-	if err != nil { b.Fatal(err) }
+	if err != nil {
+		b.Fatal(err)
+	}
 	want := len(initial)
-	if want != assetCount*2 { b.Fatalf("ожидалось %d групп, получено %d",assetCount*2,want) }
+	if want != assetCount*2 {
+		b.Fatalf("ожидалось %d групп, получено %d", assetCount*2, want)
+	}
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i:=0; i<b.N; i++ {
+	for i := 0; i < b.N; i++ {
 		groups, err := GroupMarkets(markets)
-		if err != nil { b.Fatal(err) }
-		benchmarkGroupCount=len(groups)
-		if benchmarkGroupCount != want { b.Fatalf("число групп изменилось: ожидалось %d, получено %d",want,benchmarkGroupCount) }
+		if err != nil {
+			b.Fatal(err)
+		}
+		benchmarkGroupCount = len(groups)
+		if benchmarkGroupCount != want {
+			b.Fatalf("число групп изменилось: ожидалось %d, получено %d", want, benchmarkGroupCount)
+		}
 	}
 }
