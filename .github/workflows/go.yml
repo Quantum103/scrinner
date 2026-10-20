@@ -42,8 +42,47 @@ jobs:
       - name: Запустить детерминированные бенчмарки
         run: go test -bench=. -benchmem ./...
 
-      - name: Запустить локальную диагностику без сбора котировок
-        run: go run ./cmd/scanner doctor --format json
+      - name: Подготовить временную SQLite для локальной диагностики
+        run: |
+          set -eu
+          temp_dir="$(mktemp -d)"
+          helper="cmd/scanner/stage14_doctor_init_tmp.go"
+          trap 'rm -rf "$temp_dir" "$helper"' EXIT
+          cat > "$helper" <<'EOF'
+          package main
+
+          import (
+            "context"
+            "fmt"
+            "os"
+
+            "github.com/example/crypto-arbitrage-scanner/internal/storage"
+          )
+
+          func main() {
+            if len(os.Args) != 2 {
+              fmt.Fprintln(os.Stderr, "ожидается путь к временной SQLite")
+              os.Exit(2)
+            }
+            ctx := context.Background()
+            db, err := storage.Open(ctx, os.Args[1])
+            if err != nil {
+              fmt.Fprintln(os.Stderr, err)
+              os.Exit(1)
+            }
+            if err := db.Migrate(ctx, "migrations"); err != nil {
+              _ = db.Close()
+              fmt.Fprintln(os.Stderr, err)
+              os.Exit(1)
+            }
+            if err := db.Close(); err != nil {
+              fmt.Fprintln(os.Stderr, err)
+              os.Exit(1)
+            }
+          }
+          EOF
+          go run "$helper" "$temp_dir/doctor.db"
+          go run ./cmd/scanner doctor --database "$temp_dir/doctor.db" --format json
 
       - name: Запустить go vet
         run: go vet ./...
