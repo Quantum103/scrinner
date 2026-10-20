@@ -4,7 +4,6 @@ package gate
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/example/crypto-arbitrage-scanner/internal/exchange"
@@ -17,10 +16,6 @@ type Adapter struct {
 	client *Client
 	logger *slog.Logger
 
-	mu                   sync.Mutex
-	spotTickerCache      []spotTicker
-	spotTickerReceivedAt time.Time
-	hasSpotTickerCache   bool
 }
 
 var _ exchange.Exchange = (*Adapter)(nil)
